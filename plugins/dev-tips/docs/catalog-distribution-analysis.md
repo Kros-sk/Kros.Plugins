@@ -365,6 +365,41 @@ tiché, prejaví sa ako *„plugin nič nerobí“*, nie ako chyba. Ak sa to zop
 Nie je to pravda: modul sa načítaval celý čas, len sa nedostal ku kresleniu. **Jeden plugin stačí**
 — potvrdené behom, nie validátorom, ktorý o klasických hookoch nehovorí nič.
 
+### D17 — Kedy sa pás kreslí, určuje povrch; v novom chate sa to obísť nedá
+
+**Zvolené:** tip v novozaloženom chate príde až s prvou správou a tak to ostáva. Neobchádza sa to
+ani notifikáciou OS, ani procesom na pozadí.
+
+**Prečo to vzniklo.** Pás sa javil ako nespoľahlivý: raz tam bol hneď, inokedy až po prvej správe.
+Príčina nie je v `dev-tips` ani v mode, ale v tom, **kedy vôbec vzniká proces**, ktorý modul načíta.
+
+| Ako sa otvorí | Proces | Pás |
+|---|---|---|
+| Nový chat (desktop) | až pri prvej správe | až s prvou správou |
+| Existujúca konverzácia (desktop) | pri otvorení | hneď, bez písania |
+| Terminál (`claude`) | pri spustení | pri prompte (podľa kontraktu, nemerané) |
+
+**Zmerané, nie odvodené.** Nový chat `d9627a26`: hook bežal 11:39:12.394, súbor konverzácie vznikol
+11:39:12.785, prvý riadok používateľa 11:39:12.846 — **450 ms**, čiže session vzniká spolu s prvou
+správou, nie pri otvorení okna. Obnovená konverzácia `c6eceef0` (Framework): hook bežal 11:49:51.796,
+pás vykreslil tip, súboru sa zmenil čas na 11:49:52 — a **posledný riadok konverzácie ostal z
+28. 9.** Proces nabehol a tip sa zobrazil bez jediného nového riadku.
+
+**Prečo sa to nedá obísť.** Kým proces nebeží, nie je čo načítať modul, a plugin nemá do čoho
+zabrať — nie je to medzera v API, ale poradie štartu. Jediné obchádzky vedú mimo Claude Code
+(notifikácia OS, naplánovaná úloha). To je iný a dotieravejší kanál než pás nad promptom a ide proti
+D7 aj proti tomu, že nič neopúšťa stroj; zamietnuté.
+
+**Prijatý dôsledok, a je to skôr dobre.** V novom chate tip príde presne vtedy, keď človek naozaj
+píše. Pás na prázdnom okne, ktoré niekto otvorí a hneď zavrie, by sa počítal ako zobrazený a
+cooldown by ho zjedol nadarmo.
+
+**Vedľajší nález, ktorý mení čítanie dát.** Keďže otvorenie konverzácie štartuje proces, `SessionStart`
+sa spúšťa aj pri obyčajnom klikaní po bočnom paneli — 12. 10. nabehli v Invoicingu štyri behy za
+devätnásť sekúnd bez jediného napísaného znaku. **Počet behov hooku teda nie je počet sedení pri
+práci** a na meranie dosahu (D11, D15) sa použiť nedá; zmysel má až cooldown, ktorý z toho spraví
+najviac jeden tip za `cooldownDays`.
+
 ## Riziká
 
 | Riziko | Závažnosť | Odpoveď |
