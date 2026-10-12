@@ -9,16 +9,119 @@ function Get-PluginRoot
     return (Split-Path -Parent $PSScriptRoot)
 }
 
+# One directory, whatever loaded the plugin.
+#
+# CLAUDE_PLUGIN_DATA is named after the marketplace the plugin came from, so the same
+# plugin on the same machine was handed dev-tips-kros-plugins when it ran from the repo,
+# dev-tips-inline when it ran from the cache, and dev-tips-local when the variable was
+# missing. Each kept its own shown.json and usage.json, so the cooldown, maxShows and the
+# usage suppression were counted three times over and a tip already seen could return.
+#
+# This is the same answer the handshake already uses: a path both sides can spell.
 function Get-StateDir
 {
-    if (-not [string]::IsNullOrWhiteSpace($env:CLAUDE_PLUGIN_DATA)) { $dir = $env:CLAUDE_PLUGIN_DATA }
-    else
-    {
-        $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
-        $dir = Join-Path $userHome '.claude/plugins/data/dev-tips-local'
-    }
+    $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+    $dir = Join-Path $userHome '.claude/plugins/data/dev-tips-state'
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
+    Merge-LegacyState -TargetDir $dir -LegacyDirs @(
+        (Join-Path $userHome '.claude/plugins/data/dev-tips-kros-plugins')
+        (Join-Path $userHome '.claude/plugins/data/dev-tips-inline')
+        (Join-Path $userHome '.claude/plugins/data/dev-tips-local')
+    )
+
     return $dir
+}
+
+# Folds what the split directories knew into the one that is kept, once.
+#
+# Once only: a second pass would resurrect what the person has since cleared, and clearing
+# state is how somebody silences a tip by hand.
+function Merge-LegacyState([string]$TargetDir, [string[]]$LegacyDirs)
+{
+    $marker = Join-Path $TargetDir '.merged'
+    if (Test-Path -LiteralPath $marker) { return }
+
+    $usage = [ordered]@{}
+    $entries = [ordered]@{}
+    $lastShownAt = $null
+    $lastCandidateAt = $null
+
+    foreach ($dir in @($LegacyDirs))
+    {
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+
+        $theirUsage = Read-JsonFile (Join-Path $dir 'usage.json')
+        if ($null -ne $theirUsage)
+        {
+            foreach ($p in $theirUsage.PSObject.Properties)
+            {
+                if (-not $usage.Contains($p.Name)) { $usage[$p.Name] = $p.Value }
+            }
+        }
+
+        $theirShown = Read-JsonFile (Join-Path $dir 'shown.json')
+        if ($null -eq $theirShown) { continue }
+
+        if ($theirShown.lastShownAt -and ($null -eq $lastShownAt -or $theirShown.lastShownAt -gt $lastShownAt))
+        {
+            $lastShownAt = $theirShown.lastShownAt
+        }
+        if ($theirShown.lastCandidateAt -and ($null -eq $lastCandidateAt -or $theirShown.lastCandidateAt -gt $lastCandidateAt))
+        {
+            $lastCandidateAt = $theirShown.lastCandidateAt
+        }
+
+        if ($null -eq $theirShown.entries) { continue }
+        foreach ($p in $theirShown.entries.PSObject.Properties)
+        {
+            $theirs = $p.Value
+            if (-not $entries.Contains($p.Name)) { $entries[$p.Name] = $theirs; continue }
+
+            $mine = $entries[$p.Name]
+            # The highest count, or a tip already seen its limit would be offered again.
+            $count = [Math]::Max([int]$mine.count, [int]$theirs.count)
+            $last = if ($theirs.last -gt $mine.last) { $theirs.last } else { $mine.last }
+            # firstSeen is the earliest: it says how new the tip is to this person.
+            $firstSeen = if ($theirs.firstSeen -and ($null -eq $mine.firstSeen -or $theirs.firstSeen -lt $mine.firstSeen))
+                         { $theirs.firstSeen } else { $mine.firstSeen }
+
+            $entries[$p.Name] = [pscustomobject]@{ count = $count; last = $last; firstSeen = $firstSeen }
+        }
+    }
+
+    if ($usage.Count -gt 0)
+    {
+        $merged = Read-JsonFile (Join-Path $TargetDir 'usage.json')
+        if ($null -eq $merged) { $merged = [pscustomobject]@{} }
+        foreach ($key in $usage.Keys)
+        {
+            if ($null -eq $merged.PSObject.Properties[$key])
+            {
+                $merged | Add-Member -NotePropertyName $key -NotePropertyValue $usage[$key] -Force
+            }
+        }
+        Write-JsonFile (Join-Path $TargetDir 'usage.json') $merged
+    }
+
+    if ($entries.Count -gt 0 -or $lastShownAt)
+    {
+        $shown = Read-JsonFile (Join-Path $TargetDir 'shown.json')
+        $keep = @{}
+        if ($null -ne $shown -and $null -ne $shown.entries)
+        {
+            foreach ($p in $shown.entries.PSObject.Properties) { $keep[$p.Name] = $p.Value }
+        }
+        foreach ($key in $entries.Keys) { if (-not $keep.ContainsKey($key)) { $keep[$key] = $entries[$key] } }
+
+        Write-JsonFile (Join-Path $TargetDir 'shown.json') ([pscustomobject]@{
+            lastShownAt     = if ($null -ne $shown -and $shown.lastShownAt -gt $lastShownAt) { $shown.lastShownAt } else { $lastShownAt }
+            lastCandidateAt = if ($null -ne $shown -and $shown.lastCandidateAt -gt $lastCandidateAt) { $shown.lastCandidateAt } else { $lastCandidateAt }
+            entries         = [pscustomobject]$keep
+        })
+    }
+
+    (Get-Date).ToUniversalTime().ToString('o') | Set-Content -LiteralPath $marker -Encoding UTF8
 }
 
 function Initialize-Log([string]$StateDir)

@@ -1,7 +1,7 @@
 {
   "name": "dev-tips",
   "description": "Surfaces internal tooling developers do not know about — skills, commands, agents, ADRs and team conventions — as one short, rate-limited tip at session start",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": {
     "name": "Kros-sk"
   },
