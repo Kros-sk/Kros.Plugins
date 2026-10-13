@@ -130,11 +130,12 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const beneath = await next(e)
     const pending = await readPending($, await read($, sessionId))
-    if (pending === null) return next(e)
+    if (pending === null) return beneath
 
     // Keyed by tip, not a flag: an answer must not silence the tip that comes after it.
-    if ((await read($, answeredId)) === pending.id) return next(e)
+    if ((await read($, answeredId)) === pending.id) return beneath
 
     const open = await read($, isOpen)
     const { Box, Button, Link, Text } = $.ui.resolve(e)
@@ -181,6 +182,8 @@ export const register: Register = on => {
         {/* Only the terminal needs this: there a Button takes a click once its site holds
             the focus, and nothing on screen says so. */}
         {e.surface === 'terminal' && <Text dimColor>tab aktivuje ovládanie</Text>}
+
+        {beneath}
       </Box>
     )
   })

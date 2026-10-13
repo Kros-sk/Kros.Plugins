@@ -342,9 +342,8 @@ technike, a nepatrí do kódu.
 
 ### D16 — Pás je zdieľané miesto; kto ho vezme, musí skladať
 
-**Zvolené:** `dev-tips` volá `next(e)` vždy, keď nemá čo kresliť, a vlastný strom vracia len
-vtedy, keď tip má. Oprava kolízie patrí do pluginu, ktorý to miesto zaberie — nie do toho, ktorý
-je pod ním.
+**Zvolené:** `dev-tips` volá `next(e)` vždy — aj keď tip má — a tip kladie **nad** to, čo prišlo
+zdola. Oprava kolízie patrí do pluginu, ktorý to miesto zaberie — nie do toho, ktorý je pod ním.
 
 **Prečo to vzniklo.** Nad promptom je **jedno miesto a viac záujemcov**. Hook, ktorý vráti vlastný
 strom a `next(e)` nezavolá, skryje všetko pod sebou — a urobí to **ticho**: žiadna chyba, žiadny
@@ -355,6 +354,13 @@ riadok v logu, nikto sa o tom nedozvie. `pr-watch` to robil práve takto a `dev-
 prišlo zdola, namiesto **namiesto** neho. Test `a band beneath this one is drawn too, not replaced`
 to drží na oboch povrchoch; bez neho by to niekto nevedomky vrátil, lebo pôvodný tvar vyzerá
 nevinne.
+
+**To isté pravidlo porušoval `dev-tips` sám.** `next(e)` volal len vtedy, keď nemal čo kresliť;
+s tipom vracal iba vlastný strom. Kým bol v reťazi pod `pr-watch`, nebolo to vidieť. Po
+premenovaní na `pr-list` sa poradie otočilo, `dev-tips` sa dostal navrch a tlačidlo
+*Pull requesty* zmizlo vždy, keď bol tip na obrazovke. Test `a band beneath this one is drawn too
+while a tip is shown, not replaced` to teraz drží. Poradie v reťazi si plugin nevyberá, takže
+skladať musí každý, kto pás zaberá — nielen ten, ktorý je práve navrchu.
 
 **Prijatý dôsledok:** `dev-tips` sa dá stále prekryť akýmkoľvek ďalším pluginom, ktorý neskladá.
 Zvnútra sa to zariadiť nedá — kto nevolá `next(e)`, tomu sa niet ako uhnúť. A keďže zlyhanie je

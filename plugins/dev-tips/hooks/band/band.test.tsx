@@ -25,13 +25,13 @@ const TIP = {
  * The engine beneath the plugin. Nothing stands under a test's hooks, so every event the
  * plugin hands on has to be answered here or the chain has no bottom.
  */
-const engineBeneath = (on: any, options: { quiet?: boolean } = {}) => {
+const engineBeneath = (on: any, options: { quiet?: boolean; beneath?: string } = {}) => {
   on('classic.SessionStart', () => ({}))
   if (!options.quiet) on('prompt.submit', (_$: unknown, e: { text: string }) => ({ text: e.text }))
   on('ui.render', { component: 'AbovePrompt' }, ($: any, e: any) => {
-    const { Box } = $.ui.resolve(e)
+    const { Box, Text } = $.ui.resolve(e)
 
-    return <Box />
+    return options.beneath ? <Text>{options.beneath}</Text> : <Box />
   })
 }
 
@@ -42,7 +42,7 @@ const engineBeneath = (on: any, options: { quiet?: boolean } = {}) => {
  * answering the engine's own `fs.read` from beneath the plugin - which is also a tighter
  * assertion than a real file: it proves the module asks for the path both sides agreed on.
  */
-const given = async ($: any, on: any, tip: unknown = TIP, options: { quiet?: boolean } = {}) => {
+const given = async ($: any, on: any, tip: unknown = TIP, options: { quiet?: boolean; beneath?: string } = {}) => {
   engineBeneath(on, options)
   mock.env(on, { USERPROFILE: HOME })
 
@@ -232,4 +232,17 @@ test('the other answers ask the model nothing', async ($, on) => {
   await ui.unmount()
 
   expect(asked).toHaveLength(0)
+})
+
+test('a band beneath this one is drawn too while a tip is shown, not replaced', async ($, on) => {
+  await given($, on, TIP, { beneath: 'riadok iného pluginu' })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'dev-tips', surface, ...BAND })
+
+    expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'riadok iného pluginu' })).toBeDefined()
+
+    await ui.unmount()
+  }
 })
