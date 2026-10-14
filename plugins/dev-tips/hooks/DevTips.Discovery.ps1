@@ -51,6 +51,10 @@ $script:DefaultMarketplaces = @('kros-ai-dev-tools', 'kros-plugins')
 # A skill's description is written for a model deciding whether to invoke it, so it can run to
 # several sentences. The notice is two lines. 240 is the cap every derived body gets - a skill's
 # description, an ADR's decision, a guideline's opening - so they all read the same length.
+# The abbreviations that end in a full stop without ending a sentence. Named rather than guessed:
+# every heuristic wide enough to catch these also catches ordinary words.
+$script:Abbreviations = @('napr', 'tzv', 'resp', 'atď', 'príp', 'str', 'obr', 'tj', 'napr', 'e\.g', 'i\.e', 'cca', 'max', 'min')
+
 function ConvertTo-TipBody([string]$Text, [int]$MaxLength = 240)
 {
     if ([string]::IsNullOrWhiteSpace($Text)) { return $Text }
@@ -63,18 +67,18 @@ function ConvertTo-TipBody([string]$Text, [int]$MaxLength = 240)
     $cut = -1
     foreach ($m in [regex]::Matches($window, '[.!?](\s|$)'))
     {
-        # A Slovak abbreviation ends in a full stop and is not the end of anything: three real ADR
-        # bodies were cut after "(napr." and reached the reader with the bracket still open. A
-        # lowercase word of four letters or fewer before the stop is an abbreviation, not a sentence.
-        # -cmatch, not -match: PowerShell matches case-insensitively by default, and under that
-        # \p{Ll} folds and matches "CLI" too, which cut every sentence ending in an acronym.
+        # Named abbreviations only. "Any short lowercase word" also rejects "it", "nič" and "kód",
+        # which are ordinary sentence endings - and with every boundary rejected the ellipsis
+        # fallback fires, so the body ends on a full stop AND an ellipsis.
         if ($window[$m.Index] -eq '.' -and
-            $window.Substring(0, $m.Index) -cmatch '(?:^|[\s(])\p{Ll}{1,4}$') { continue }
+            $window.Substring(0, $m.Index) -match ('(?:^|[\s(])(?:{0})$' -f ($script:Abbreviations -join '|'))) { continue }
 
+        # Unclosed, not merely unequal: a stray ")" with no opener - "Pravidlo a) hovorí" is
+        # ordinary enumeration here - would otherwise poison every boundary after it.
         $candidate = $window.Substring(0, $m.Index + 1)
         $opens = ($candidate.ToCharArray() | Where-Object { $_ -eq '(' }).Count
         $closes = ($candidate.ToCharArray() | Where-Object { $_ -eq ')' }).Count
-        if ($opens -ne $closes) { continue }
+        if ($opens -gt $closes) { continue }
 
         $cut = $m.Index
     }

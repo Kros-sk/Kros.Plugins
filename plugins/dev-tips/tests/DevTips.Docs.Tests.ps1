@@ -241,3 +241,28 @@ Something else.
         @(Get-GuidelineTips -RepoRoot $repo).Count | Should -Be 0
     }
 }
+
+Describe 'Get-AdrTips when a block mixes prose with markup' {
+    # The guard is for a block that OPENS with a heading or a table, which is ADR 0018. Applied to
+    # every line it threw away the whole block the moment a stray markup line appeared further
+    # down, and announced the NEXT paragraph as if it were the decision - a silent substitution.
+    It 'keeps the prose and stops at the markup, instead of announcing a different paragraph' {
+        $dir = New-TempDir
+        New-Adr $dir '0030-mix.md' @'
+---
+title: Mix
+---
+
+## Rozhodnutie
+
+Pouzivame nasledovne pravidlo pre kazdy projekt.
+#region internals
+
+Druhy odstavec nie je rozhodnutie.
+'@
+
+        $body = @(Get-AdrTips -Root $dir)[0].body
+
+        $body | Should -Be 'Pouzivame nasledovne pravidlo pre kazdy projekt.'
+    }
+}

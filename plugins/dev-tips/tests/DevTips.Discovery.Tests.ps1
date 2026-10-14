@@ -112,3 +112,41 @@ Describe 'Get-DiscoveredTips' {
         @($tips).Count | Should -Be 0
     }
 }
+
+Describe 'ConvertTo-TipBody and ordinary prose that only looks like an abbreviation' {
+    # The abbreviation rule exists for "napr." and its kind. Written as "any short lowercase word"
+    # it also rejects "it", "nič", "kód" - ordinary sentence endings - and then no boundary is left
+    # at all, so the ellipsis fallback fires and the body ends on a full stop AND an ellipsis.
+    It 'cuts after a sentence that ends in a short ordinary word' {
+        $text = 'Use when someone wants to understand a pull request, branch or commit instead of ' +
+                'reading the raw diff, as its author before review, as a reviewer, or to catch up ' +
+                'on what landed in a project while away or when joining it. ' +
+                'Triggers: vysvetli PR, explain this PR, walk me through this change and so on.'
+
+        $body = ConvertTo-TipBody $text
+
+        $body | Should -Not -Match '\.…$' -Because 'a full stop followed by an ellipsis reads as a bug'
+        $body | Should -BeLike '*joining it.'
+    }
+
+    It 'still refuses to cut after a real abbreviation' {
+        $text = 'Zaviedli sme pravidlo, ktoré platí všade a popisuje veci veľmi zoširoka. ' +
+                'Druhá veta hovorí o module Invoicing a o module Framework a aj o ďalších (napr. ' +
+                'v Účtovníctve a v ERP a v iných systémoch, ktoré používame na rôznych projektoch a v tímoch), ' +
+                'čo presne tým myslíme a prečo to tak je.'
+
+        ConvertTo-TipBody $text | Should -Not -Match '\(napr\.$'
+    }
+
+    It 'is not poisoned by a closing bracket that never had an opener' {
+        $text = 'Pravidlo a) hovorí, že každý modul má mať vlastný priečinok a vlastné testy. ' +
+                'Druhá veta vysvetľuje, prečo to tak je a čo z toho plynie pre nové projekty. ' +
+                'Tretia veta je už celá za hranicou dvestoštyridsiatich znakov, nemá sa zobraziť ' +
+                'a je tu len preto, aby orezávanie vôbec nastalo a bolo čo posudzovať.'
+
+        $body = ConvertTo-TipBody $text
+
+        $body | Should -Not -Match '…$' -Because 'a) is ordinary enumeration, not an unclosed bracket'
+        $body | Should -BeLike '*plynie pre nové projekty.'
+    }
+}

@@ -74,8 +74,11 @@ function ConvertTo-Prose([string]$Block)
     {
         $t = $line.Trim()
         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-        if ($t.StartsWith('#')) { return $null }
-        if ($t.StartsWith('|')) { return $null }
+        # Markup ends the block; it does not discard it. Deciding on every line meant one stray
+        # "#region" two lines down threw away a real decision and announced the next paragraph in
+        # its place, with nothing to say it had happened. A block that OPENS with markup - ADR
+        # 0018's sub-heading and table, which this guard was written for - still yields nothing.
+        if ($t.StartsWith('#') -or $t.StartsWith('|') -or $t.StartsWith('>')) { break }
         if ($t -match '^<!--') { continue }
 
         # Numbered items lose their number for the same reason bullets lose their marker: flattened
