@@ -62,6 +62,7 @@ Nič.
 
         $body.Length | Should -BeLessOrEqual 240
         $body.TrimEnd() | Should -Not -Match '[-,;]$' -Because 'an announcement cut mid-list reads as a bug'
+        $body | Should -Not -Match '^\s*[-*+]\s' -Because 'a lone bullet opening the band is markup, not a sentence'
     }
 
     It 'prefers a tip line in the front matter over the decision paragraph' {
@@ -81,11 +82,75 @@ Nič.
         @(Get-AdrTips -Root $dir)[0].body | Should -Be 'Robíme to takto.'
     }
 
+    # The band draws Text, not markdown. A decision written as **this** would reach the person
+    # with the asterisks still in it, and ADR 0002 is written exactly that way.
+    It 'strips the markup the document wrote for a renderer the band does not have' {
+        $dir = New-TempDir
+        $body = 'Prechod na **TeaPie framework** pre `integračné` testy.'
+        New-Adr $dir '0002-teapie.md' "---`ntitle: TeaPie`n---`n`n## Rozhodnutie`n`n$body`n"
+
+        @(Get-AdrTips -Root $dir)[0].body | Should -Be 'Prechod na TeaPie framework pre integračné testy.'
+    }
+
     # Asserted the way DevTips.RepoTips.Tests.ps1 asserts it, and for the reason the comment in
     # DevTips.RepoTips.ps1 gives: a bare `return @()` unrolls to $null, and the `,@()` wrapper that
     # would keep it an array is what broke Get-RepoTips when a caller consumed it inline. The
     # contract every caller actually relies on is that `@(Get-AdrTips ...)` counts zero.
     It 'counts as nothing when the directory does not exist' {
         @(Get-AdrTips -Root (Join-Path (New-TempDir) 'no-such')).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-GuidelineTips' {
+    It 'takes the heading and the first paragraph' {
+        $repo = New-TempDir
+        $dir = Join-Path $repo 'docs/guidelines'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'design-doc-template.md') -Encoding UTF8 -Value @'
+# Design Document Template
+
+Use this template for all design documents: features, bugs, and refactoring.
+
+## Filename
+
+Something else.
+'@
+
+        $tips = @(Get-GuidelineTips -RepoRoot $repo)
+
+        @($tips).Count | Should -Be 1
+        $tips[0].kind | Should -Be 'guideline'
+        $tips[0].title | Should -Be 'Design Document Template'
+        $tips[0].body | Should -Be 'Use this template for all design documents: features, bugs, and refactoring.'
+        $tips[0].ref | Should -Be 'docs/guidelines/design-doc-template.md'
+        $tips[0].maxShows | Should -Be 1
+    }
+
+    # The same trap Get-AdrTips fell into: the fixtures are LF, every real document is CRLF.
+    It 'reads a guideline whose lines end CRLF' {
+        $repo = New-TempDir
+        $dir = Join-Path $repo 'docs/guidelines'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $dir 'workflow.md'),
+            "# Workflow`r`n`r`nPrvý odsek, ktorý sa má zobraziť.`r`n`r`n## Ďalšie`r`n",
+            [Text.UTF8Encoding]::new($false))
+
+        $tips = @(Get-GuidelineTips -RepoRoot $repo)
+
+        $tips[0].title | Should -Be 'Workflow'
+        $tips[0].body | Should -Be 'Prvý odsek, ktorý sa má zobraziť.'
+    }
+
+    It 'counts as nothing when the repository has no guidelines' {
+        @(Get-GuidelineTips -RepoRoot (New-TempDir)).Count | Should -Be 0
+    }
+
+    It 'skips a file with a heading and nothing under it' {
+        $repo = New-TempDir
+        $dir = Join-Path $repo 'docs/guidelines'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'empty.md') -Value "# Len nadpis`n" -Encoding UTF8
+
+        @(Get-GuidelineTips -RepoRoot $repo).Count | Should -Be 0
     }
 }
