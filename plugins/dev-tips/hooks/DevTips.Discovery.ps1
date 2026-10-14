@@ -49,8 +49,8 @@ function Read-SkillFrontmatter([string]$Path)
 $script:DefaultMarketplaces = @('kros-ai-dev-tools', 'kros-plugins')
 
 # A skill's description is written for a model deciding whether to invoke it, so it can run to
-# several sentences. The notice is two lines. 240 is the same cap Test-TipFiles.ps1 enforces on
-# authored bodies, so both kinds of tip read the same length.
+# several sentences. The notice is two lines. 240 is the cap every derived body gets - a skill's
+# description, an ADR's decision, a guideline's opening - so they all read the same length.
 function ConvertTo-TipBody([string]$Text, [int]$MaxLength = 240)
 {
     if ([string]::IsNullOrWhiteSpace($Text)) { return $Text }

@@ -154,15 +154,26 @@ The reasoning and the rejected alternatives are in
 | `maxShows` | how many times one developer may see it |
 | `install` | `marketplace`, `repo`, `plugin` — drives the install variants above; `null` for ADRs and conventions |
 
-## Publishing tips
+## Where the words come from
 
-Tips are authored in `Kros-sk/Kros.AiDevTools`, one `tip.json` beside the skill or command it
-describes. Nothing is generated and nothing is published: the plugin fetches `master` shallow and
-reads those files. See `docs/catalog-distribution.md`.
+Nobody writes a tip. The text is taken from the thing it describes, and there is no second copy to
+keep in step with the first:
 
-`tools/Test-TipFiles.ps1` and `tools/dev-tips-validate.yml` are the validator for that repository.
-Copy them to `tools/` and `.github/workflows/` there. They are kept and tested here because this is
-where the format is defined.
+| What | Title | Body |
+|---|---|---|
+| skill, command, agent | its `name` | `description:` in its `SKILL.md` |
+| ADR | `title:` in its front matter | first paragraph of `## Rozhodnutie` |
+| guideline | its `# H1` | the first paragraph under it |
+
+Where that prose does not trim into one readable line, the document may carry a single `tip:` line
+in its own front matter, and that is used instead. It lives in the document, never in a file of its
+own: `authoredTips` is `false` and the `*.tip.json` channel is retired. See D18 in
+`docs/catalog-distribution-analysis.md`.
+
+ADRs are fetched shallow from `Kros-sk/Kros.ADR` by the detached refresh and written out under the
+state directory; guidelines are read live from `docs/guidelines` in the repository being worked in.
+A document is announced **once** (`maxShows: 1`), and everything that already existed when the
+channel was switched on is recorded as announced, apart from the ids in `announceAnyway`.
 
 ## Tests
 

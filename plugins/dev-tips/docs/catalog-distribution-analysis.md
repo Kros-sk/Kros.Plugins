@@ -406,6 +406,50 @@ devätnásť sekúnd bez jediného napísaného znaku. **Počet behov hooku teda
 práci** a na meranie dosahu (D11, D15) sa použiť nedá; zmysel má až cooldown, ktorý z toho spraví
 najviac jeden tip za `cooldownDays`.
 
+### D18 — Autorský súbor sa ruší; text nesie sám dokument
+
+**Zvolené:** `*.tip.json` sa nepíše. Text tipu je `description` zo `SKILL.md`, text pravidla je
+`title` a prvý odsek `## Rozhodnutie` z ADR alebo `# H1` a prvý odsek z guideline. Jedinou
+povolenou autorskou kópiou je nepovinný riadok `tip:` vo front matter **toho istého dokumentu** —
+vedľa veci, ktorú opisuje, nikdy v samostatnom súbore. **Ruší D1, D2 a D10.**
+
+**Prečo to vzniklo.** Kanál autorských súborov stál prácu a nedoručil nič. Katalóg vyexpedoval
+osem autorských tipov a **ani jeden `*.tip.json` nikdy nikto nenapísal**; všetky tipy, ktoré sa
+reálne zobrazili, vznikli z popisu objaveného skillu. Druhá, ručne písaná kópia vety, ktorú už
+autor nástroja napísal, je práca navyše s dvoma miestami pravdy.
+
+**Vypína sa, nemaže.** `authoredTips: false` obchádza zabalený katalóg, stiahnuté tipy aj
+repozitárové `.dev-tips`. Čítačky zostávajú na mieste, takže zapnutie späť je zmena configu, nie
+revert. Zmerané pri zavedení: katalóg spadol zo 16 položiek na 8, odišlo presne tých 8 autorských.
+
+**Pravidlá sú oznámenia, nie tipy.** ADR a guideline dostávajú `maxShows = 1` a nijaké potlačenie
+podľa použitia — pravidlo sa nespúšťa a nikto ho „už nepoužíva". V páse preto nestoja tlačidlá
+*„Ukáž ako"* a *„Už to používam"*, ale *„Vysvetli mi to"* a *„Poznám"*; stlačenia sú tie isté dve,
+takže odpovede ostávajú porovnateľné naprieč druhmi.
+
+**Čo sa stane so starým obsahom.** Všetko, čo existuje pri zapnutí kanála, sa raz zapíše do
+`shown.json` ako už oznámené — inak by sa fronta dvadsiatich šiestich oznámení žrala jedno
+oznámenie za cooldown celé mesiace a skilly by sa nedostali na rad. Výnimky menuje
+`announceAnyway`: `0018-CompanyId-vs-TenantId` a `0021-Nepouzivame-ApplicationType-v-novych-castiach`,
+teda ADR zmerané ako najporušovanejšie, ktoré vznikli pred zapnutím a oznámiť sa raz oplatí.
+Baseline beží **raz** a cooldown nechá na pokoji: je to účtovníctvo, nie zobrazenie.
+
+**Čím je podložené, že sa to dá čítať.** Na 22 ADR v `Kros.ADR` a 4 guidelines v Invoicingu: 20 ADR
+má `## Rozhodnutie` (2 nemajú a preskočia sa), prvý odsek má medián 150 znakov a 14 z 20 sa zmestí
+pod strop 240 bez zásahu; zvyšok oreže `ConvertTo-TipBody` na vete. Po zapojení dal reťazec 24
+dokumentov a baseline zapísal 22 záznamov. Dve veci sa ukázali až na ostrých dátach a fixtures ich
+nezachytili: dokumenty majú **CRLF**, na ktorom pôvodná kotva regexu našla 20 nadpisov vo fixtures
+a 0 v repozitári, a nesú **markdown**, ktorý by pás — kreslí `Text`, nie markdown — ukázal ako
+doslovné hviezdičky; oboje má odvtedy vlastný test.
+
+**Prijatý dôsledok.** Objavovanie vidí len nainštalované skilly z našich marketplaceov a dokumenty
+z ADR repa a `docs/guidelines`. Čokoľvek iné, čo by sa oplatilo oznámiť a nemá ani popis, ani jednu
+z týchto dvoch podôb, sa cez `dev-tips` nedoručí, kým preň nevznikne vlastná čítačka. To je cena za
+to, že nikto nepíše text dvakrát.
+
+**Čo tým padá.** `tools/Test-TipFiles.ps1` a workflow `dev-tips-validate.yml` validovali kanál,
+ktorý je vypnutý; odchádzajú spolu s ním aj z PR na Kros.AiDevTools.
+
 ## Riziká
 
 | Riziko | Závažnosť | Odpoveď |
