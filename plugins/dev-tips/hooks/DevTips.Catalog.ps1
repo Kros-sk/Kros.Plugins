@@ -3,6 +3,7 @@
 
 . (Join-Path $PSScriptRoot 'DevTips.Discovery.ps1')
 . (Join-Path $PSScriptRoot 'DevTips.RepoTips.ps1')
+. (Join-Path $PSScriptRoot 'DevTips.Docs.ps1')
 
 # Authored copy beats generated copy. Discovery exists so the plugin works before anyone writes
 # anything; once somebody has written a tip, theirs is the better text and goes first.
@@ -97,6 +98,22 @@ function Get-TipCatalog([string]$StateDir, [string]$PluginRoot, [string]$Plugins
                                          -Marketplaces $config.discoverMarketplaces
     }
     catch { }
+
+    # Documents are announcements, not tips: maxShows 1 and no usage suppression, because nobody
+    # "already uses" a rule. They ride the same single notice per cooldown, and the baseline is
+    # what keeps the backlog of everything written so far from eating it.
+    if ($null -eq $config.announceDocs -or [bool]$config.announceDocs)
+    {
+        $docs = @()
+        try { $docs += @(Get-AdrTips -Root (Join-Path $StateDir 'adr/Adrs')) } catch { }
+        try { $docs += @(Get-GuidelineTips -RepoRoot $RepoRoot) } catch { }
+
+        if ($docs.Count -gt 0)
+        {
+            Initialize-DocsBaseline -StateDir $StateDir -Tips $docs -AnnounceAnyway @($config.announceAnyway)
+            $discovered = @($discovered) + @($docs)
+        }
+    }
 
     return [pscustomobject]@{ tips = (Merge-Tips -Authored $tips -Discovered $discovered); config = $config }
 }

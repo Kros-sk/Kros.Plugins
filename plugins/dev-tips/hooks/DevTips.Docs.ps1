@@ -144,3 +144,43 @@ function Get-GuidelineTips([string]$RepoRoot)
 
     return $tips
 }
+
+# Everything that exists the first time this runs is history, not news. Without it, switching the
+# channel on would queue every document on the machine and the skills would not get a turn for
+# months.
+#
+# Once only, and for the same reason the state merge is once only: a second pass would silence
+# every document written since the first, and those are exactly the ones worth announcing.
+function Initialize-DocsBaseline([string]$StateDir, $Tips, [string[]]$AnnounceAnyway)
+{
+    $marker = Join-Path $StateDir '.docs-baseline'
+    if (Test-Path -LiteralPath $marker) { return }
+
+    $keep = @{}
+    $shown = Read-JsonFile (Join-Path $StateDir 'shown.json')
+    if ($null -ne $shown -and $null -ne $shown.entries)
+    {
+        foreach ($p in $shown.entries.PSObject.Properties) { $keep[$p.Name] = $p.Value }
+    }
+
+    $now = (Get-Date).ToUniversalTime().ToString('o')
+    $spare = @($AnnounceAnyway)
+    foreach ($tip in @($Tips))
+    {
+        if ($spare -contains $tip.id) { continue }
+        if ($keep.ContainsKey($tip.id)) { continue }
+
+        $max = if ($null -ne $tip.maxShows) { [int]$tip.maxShows } else { 1 }
+        $keep[$tip.id] = [pscustomobject]@{ count = $max; last = $now; firstSeen = $now }
+    }
+
+    # The cooldown is carried through untouched: a baseline is bookkeeping, not a showing, and
+    # moving lastShownAt here would cost the person their next real tip.
+    Write-JsonFile (Join-Path $StateDir 'shown.json') ([pscustomobject]@{
+        lastShownAt     = if ($null -ne $shown) { $shown.lastShownAt } else { $null }
+        lastCandidateAt = if ($null -ne $shown) { $shown.lastCandidateAt } else { $null }
+        entries         = [pscustomobject]$keep
+    })
+
+    $now | Set-Content -LiteralPath $marker -Encoding UTF8
+}

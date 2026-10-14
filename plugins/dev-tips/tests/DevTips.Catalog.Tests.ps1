@@ -159,3 +159,78 @@ Describe 'Get-TipCatalog when authored tips are switched off' {
         $result.tips.Count | Should -Be 1 -Because 'an older config must not lose its tips to a key it never set'
     }
 }
+
+Describe 'Get-TipCatalog with documents' {
+    It 'carries ADR tips when announceDocs is on' {
+        $pluginRoot = New-FakePluginRoot -Tips @{ id = 'alpha'; title = 'A'; body = 'b'; repos = @('*') } `
+                                        -Config @{ authoredTips = $false; announceDocs = $true }
+        $state = New-TempDir
+        New-Item -ItemType Directory -Path (Join-Path $state 'adr/Adrs') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $state 'adr/Adrs/0001-x.md') -Encoding UTF8 `
+                    -Value "---`ntitle: Prvé`n---`n`n## Rozhodnutie`n`nRobíme to takto.`n"
+
+        $result = Get-TipCatalog -StateDir $state -PluginRoot $pluginRoot `
+                                 -PluginsRoot (New-TempDir) -RepoRoot (New-TempDir)
+
+        @($result.tips | Where-Object { $_.kind -eq 'adr' }).Count | Should -Be 1
+    }
+
+    It 'carries no documents when announceDocs is off' {
+        $pluginRoot = New-FakePluginRoot -Tips @{ id = 'alpha'; title = 'A'; body = 'b'; repos = @('*') } `
+                                        -Config @{ authoredTips = $false; announceDocs = $false }
+        $state = New-TempDir
+        New-Item -ItemType Directory -Path (Join-Path $state 'adr/Adrs') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $state 'adr/Adrs/0001-x.md') -Encoding UTF8 `
+                    -Value "---`ntitle: Prvé`n---`n`n## Rozhodnutie`n`nRobíme to takto.`n"
+
+        $result = Get-TipCatalog -StateDir $state -PluginRoot $pluginRoot `
+                                 -PluginsRoot (New-TempDir) -RepoRoot (New-TempDir)
+
+        @($result.tips | Where-Object { $_.kind -eq 'adr' }).Count | Should -Be 0
+    }
+}
+
+Describe 'Initialize-DocsBaseline' {
+    It 'marks everything that already exists as announced' {
+        $state = New-TempDir
+        $tips = @([pscustomobject]@{ id = 'a'; maxShows = 1 }, [pscustomobject]@{ id = 'b'; maxShows = 1 })
+
+        Initialize-DocsBaseline -StateDir $state -Tips $tips -AnnounceAnyway @()
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.a.count | Should -Be 1 -Because 'a document that was already there is not news'
+        $shown.entries.b.count | Should -Be 1
+    }
+
+    It 'leaves the named exceptions to announce' {
+        $state = New-TempDir
+        $tips = @([pscustomobject]@{ id = 'a'; maxShows = 1 }, [pscustomobject]@{ id = '0021'; maxShows = 1 })
+
+        Initialize-DocsBaseline -StateDir $state -Tips $tips -AnnounceAnyway @('0021')
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.a.count | Should -Be 1
+        $shown.entries.PSObject.Properties['0021'] | Should -BeNullOrEmpty -Because 'the measured exceptions are the point of the switch'
+    }
+
+    It 'runs once, so a document added later is still news' {
+        $state = New-TempDir
+        Initialize-DocsBaseline -StateDir $state -Tips @([pscustomobject]@{ id = 'a'; maxShows = 1 }) -AnnounceAnyway @()
+        Initialize-DocsBaseline -StateDir $state -Tips @([pscustomobject]@{ id = 'b'; maxShows = 1 }) -AnnounceAnyway @()
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.PSObject.Properties['b'] | Should -BeNullOrEmpty -Because 'a second baseline would silence every ADR written from now on'
+    }
+
+    It 'keeps the cooldown it found, because a baseline is not a showing' {
+        $state = New-TempDir
+        ([pscustomobject]@{ lastShownAt = '2026-10-12T06:25:33Z'; entries = [pscustomobject]@{} }) |
+            ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $state 'shown.json') -Encoding UTF8
+
+        Initialize-DocsBaseline -StateDir $state -Tips @([pscustomobject]@{ id = 'a'; maxShows = 1 }) -AnnounceAnyway @()
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        ([datetime]$shown.lastShownAt).ToUniversalTime() |
+            Should -Be ([datetime]'2026-10-12T06:25:33Z').ToUniversalTime()
+    }
+}

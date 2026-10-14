@@ -2,5 +2,10 @@
   "cooldownDays": 2,
   "candidateCooldownHours": 12,
   "delivery": "band",
-  "authoredTips": false
+  "authoredTips": false,
+  "announceDocs": true,
+  "announceAnyway": [
+    "0018-CompanyId-vs-TenantId",
+    "0021-Nepouzivame-ApplicationType-v-novych-castiach"
+  ]
 }
