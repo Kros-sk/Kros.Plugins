@@ -225,10 +225,13 @@ export const register: Register = on => {
             </Text>
           </Box>
           <Box gap={1} flexShrink={0}>
-            {!open && <Button key="open" label="Rozbaliť" hotkey="1" onPress={() => update($, isOpen, () => true)} />}
-            {open && <Button key="close" label="Zbaliť" hotkey="1" onPress={() => update($, isOpen, () => false)} />}
+            {/* No hotkeys: the engine draws the digit beside the label when one is set, and the
+                row read as numbered options rather than as answers. The cost is real - a bare
+                digit in an empty composer no longer answers the band - so they go on the word. */}
+            {!open && <Button key="open" label="Rozbaliť" onPress={() => update($, isOpen, () => true)} />}
+            {open && <Button key="close" label="Zbaliť" onPress={() => update($, isOpen, () => false)} />}
             {/* U+00D7: one cell wide everywhere, unlike U+2715, which shifts the row. */}
-            <Button key="drop" label="×" hotkey="2" onPress={() => choose('dropped')} />
+            <Button key="drop" label="×" onPress={() => choose('dropped')} />
           </Box>
         </Box>
 
@@ -244,8 +247,8 @@ export const register: Register = on => {
           // A blank row above the answers: pressed against the body they read as part of the
           // sentence rather than as a question being put to the person.
           <Box gap={2} marginTop={1}>
-            <Button key="show" label={doc ? 'Vysvetli mi to' : 'Ukáž ako'} hotkey="3" onPress={() => choose('show')} />
-            <Button key="known" label={doc ? 'Poznám' : 'Už to používam'} hotkey="4" onPress={() => choose('known')} />
+            <Button key="show" label={doc ? 'Vysvetli mi to' : 'Ukáž ako'} onPress={() => choose('show')} />
+            <Button key="known" label={doc ? 'Poznám' : 'Už to používam'} onPress={() => choose('known')} />
             {pending.url ? <Link href={pending.url} label="Dokumentácia" /> : null}
           </Box>
         )}

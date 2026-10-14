@@ -418,3 +418,18 @@ test('a tip with no full text shows the same body expanded or not', async ($, on
 
   await ui.unmount()
 })
+
+test('the answers carry no hotkey, so the engine draws no digit beside them', async ($, on) => {
+  await given($, on)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+
+  for (const key of ['close', 'drop', 'show', 'known']) {
+    const button = await ui.find({ type: 'Button', key })
+    expect(button).toBeDefined()
+    expect(button?.props?.hotkey).toBeUndefined()
+  }
+
+  await ui.unmount()
+})
