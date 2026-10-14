@@ -28,6 +28,41 @@ type Pending = {
   url: string | null
   installState: string
   stateDir: string
+  /** Written by the band the first time this handshake is drawn. */
+  shownAt?: string
+}
+
+/**
+ * The handshake this load drew.
+ *
+ * A file is marked `shownAt` the first time it is drawn, and the fallback below then leaves
+ * it alone. Without the mark the fallback kept handing the newest file on the machine to
+ * every session that had no id of its own - and since the cooldown writes no new handshake
+ * for days, "newest" stayed the same file and the same tip came back session after session.
+ *
+ * This load keeps redrawing the one it drew, which the mark would otherwise end mid-session.
+ * Per load on purpose: a reload is a fresh start, and the mark on disk decides from there.
+ */
+let owned: string | null = null
+
+/**
+ * Takes the handshake for this load and leaves the mark that says it was delivered.
+ *
+ * A failed write must not cost the draw: the tip is on screen either way, and an unmarked
+ * file is offered once more, which is the harmless direction to fail in.
+ */
+async function claim($: any, path: string, found: Pending) {
+  owned = path
+
+  if (!found.shownAt) {
+    try {
+      await $.fs.write(path, JSON.stringify({ ...found, shownAt: new Date().toISOString() }, null, 2))
+    } catch {
+      // Left unmarked on purpose; see above.
+    }
+  }
+
+  return found
 }
 
 /**
@@ -43,8 +78,13 @@ async function readPending($: any, id: string | null) {
   const dir = `${home}/.claude/plugins/data/dev-tips-shared`
 
   if (id) {
+    const path = `${dir}/pending-${id}.json`
     try {
-      return JSON.parse(await $.fs.read(`${dir}/pending-${id}.json`)) as Pending
+      const found = JSON.parse(await $.fs.read(path)) as Pending
+
+      // Marked here too, though this path never refuses a marked file: a tip drawn for the
+      // session it was picked for must not be left for another session's fallback to find.
+      return await claim($, path, found)
     } catch {
       return null
     }
@@ -60,7 +100,13 @@ async function readPending($: any, id: string | null) {
       .sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
     if (!newest) return null
 
-    return JSON.parse(await $.fs.read(`${dir}/${newest.name}`)) as Pending
+    const path = `${dir}/${newest.name}`
+    const found = JSON.parse(await $.fs.read(path)) as Pending
+
+    // Somebody has already been shown this one. Only the load that drew it keeps drawing it.
+    if (found.shownAt && owned !== path) return null
+
+    return await claim($, path, found)
   } catch {
     return null
   }

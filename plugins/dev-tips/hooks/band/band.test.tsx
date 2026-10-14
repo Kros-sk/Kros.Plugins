@@ -246,3 +246,58 @@ test('a band beneath this one is drawn too while a tip is shown, not replaced', 
     await ui.unmount()
   }
 })
+
+/**
+ * A session the module has no id for: the handshake is found through the fallback.
+ *
+ * `classic.SessionStart` is deliberately not called - measured on 14 Oct, the band reached
+ * its first draw with no id and took this path, which is how a tip picked 41 hours earlier
+ * came back session after session.
+ */
+const OTHER = `${SHARED}/pending-session-0.json`
+
+const givenNoId = (on: any, handshake: Record<string, unknown>) => {
+  engineBeneath(on)
+  mock.env(on, { USERPROFILE: HOME })
+
+  on('fs.list', () => ({
+    value: [
+      { name: 'pending-session-0.json', kind: 'file' as const, size: 1, mtimeMs: Date.now() - 41 * 3600_000 },
+    ],
+  }))
+  on('fs.read', (_$: unknown, e: { path: string }) => {
+    if (normalise(e.path) === OTHER) return { value: JSON.stringify(handshake) }
+
+    throw new Error(`no such file: ${e.path}`)
+  })
+}
+
+test('a tip already delivered to somebody is not offered again by the fallback', async ($, on) => {
+  givenNoId(on, { ...TIP, shownAt: '2026-10-12T12:06:56Z' })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeUndefined()
+
+  await ui.unmount()
+})
+
+test('a tip nobody has been shown is still drawn, however old the handshake', async ($, on) => {
+  givenNoId(on, TIP)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('drawing through the fallback marks the handshake, so the next session leaves it', async ($, on) => {
+  const writes = writesOf(on)
+  givenNoId(on, TIP)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.unmount()
+
+  expect(JSON.parse(writes[OTHER]).shownAt).toBeDefined()
+})
