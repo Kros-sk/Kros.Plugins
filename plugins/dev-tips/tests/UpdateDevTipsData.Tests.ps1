@@ -83,3 +83,19 @@ Describe 'Update-DevTipsData.ps1 remote step' {
         Test-Path -LiteralPath (Join-Path $stateDir 'remote-tips.json') | Should -BeFalse
     }
 }
+
+Describe 'Update-DevTipsData.ps1 and the ADR mirror' {
+    # The mirror git keeps is bare: it has no working tree, so Get-ChildItem finds nothing in it.
+    # The refresh writes the documents out as files, and the session-start path stays a plain
+    # directory read with no git process on it.
+    It 'writes the ADR documents out where the reader can see them' {
+        $stateDir = New-TempDir
+
+        & pwsh -NoProfile -File $script:Script -StateDir $stateDir -ProjectsRoot (New-FakeTranscripts) `
+               -AdrOrigin (New-FixtureAdrRepo)
+        $LASTEXITCODE | Should -Be 0
+
+        Test-Path -LiteralPath (Join-Path $stateDir 'adr/Adrs/0001-prve.md') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $stateDir 'adr.stamp') | Should -BeTrue
+    }
+}

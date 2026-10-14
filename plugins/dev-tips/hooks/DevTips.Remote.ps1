@@ -103,3 +103,33 @@ function Test-SnapshotStale([string]$StateDir, [int]$TtlHours)
     $age = (Get-Date).ToUniversalTime() - (Get-Item -LiteralPath $path).LastWriteTimeUtc
     return ($age.TotalHours -ge $TtlHours)
 }
+
+# Writes files out of a bare mirror onto disk.
+#
+# The mirror has no working tree, so nothing in it can be read with Get-ChildItem. The documents
+# are exported once per refresh and the session-start path stays a plain directory read: a hook
+# that must not delay a session has no business spawning a git process per document.
+function Export-MirrorFiles([string]$MirrorPath, [string]$TargetDir, [string]$Pattern)
+{
+    $list = Invoke-Git @('-C', $MirrorPath, 'ls-tree', '-r', '--name-only', 'FETCH_HEAD')
+    if (-not $list.ok) { return 0 }
+
+    $written = 0
+    foreach ($path in @($list.output -split "`n"))
+    {
+        $clean = $path.Trim()
+        if ([string]::IsNullOrWhiteSpace($clean) -or $clean -notmatch $Pattern) { continue }
+
+        $blob = Invoke-Git @('-C', $MirrorPath, 'show', "FETCH_HEAD:$clean")
+        if (-not $blob.ok) { continue }
+
+        $target = Join-Path $TargetDir $clean
+        $parent = Split-Path -Parent $target
+        if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+
+        Set-Content -LiteralPath $target -Value $blob.output -Encoding UTF8
+        $written++
+    }
+
+    return $written
+}

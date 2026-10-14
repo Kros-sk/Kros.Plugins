@@ -14,6 +14,9 @@ param(
     [string]$Branch = 'master',
     [int]$HistoryWindowDays = 90,
     [int]$HistoryTtlHours = 24,
+    [string]$AdrOrigin = 'https://github.com/Kros-sk/Kros.ADR.git',
+    [string]$AdrBranch = 'master',
+    [int]$AdrTtlHours = 24,
     [int]$LockStaleMinutes = 30
 )
 
@@ -113,6 +116,35 @@ try
     else
     {
         Write-Log 'refresh: remote stamp fresh, skipped'
+    }
+
+    # The ADRs, on their own stamp like every other job: a failing fetch here must not cost the
+    # tips. The mirror is bare, so the documents are written out beside it - see Export-MirrorFiles.
+    if (Test-StampStale -StateDir $StateDir -Name 'adr' -Hours $AdrTtlHours)
+    {
+        try
+        {
+            $adrMirror = Join-Path $StateDir 'adr-mirror'
+            if (Invoke-MirrorFetch -MirrorPath $adrMirror -Origin $AdrOrigin -Branch $AdrBranch)
+            {
+                $written = Export-MirrorFiles -MirrorPath $adrMirror `
+                                              -TargetDir (Join-Path $StateDir 'adr') -Pattern '\.md$'
+                Update-Stamp -StateDir $StateDir -Name 'adr'
+                Write-Log ('refresh: adr mirror fetched | documents={0}' -f $written)
+            }
+            else
+            {
+                Write-Log "refresh: adr fetch failed | origin=$AdrOrigin"
+            }
+        }
+        catch
+        {
+            Write-Log ('refresh: adr fetch failed | {0}' -f $_.Exception.Message)
+        }
+    }
+    else
+    {
+        Write-Log 'refresh: adr stamp fresh, skipped'
     }
 
     exit 0

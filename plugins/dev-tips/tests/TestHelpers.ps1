@@ -98,3 +98,19 @@ function New-FakeTranscripts
 
     return $root
 }
+
+function New-FixtureAdrRepo
+{
+    # A stand-in for Kros.ADR: a real git repo on disk, no network involved.
+    $repo = New-TempDir
+    $dir = Join-Path $repo 'Adrs'
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+
+    @('---', 'title: Prvé rozhodnutie', '---', '', '## Rozhodnutie', '', 'Robíme to takto.') |
+        Set-Content -LiteralPath (Join-Path $dir '0001-prve.md') -Encoding UTF8
+
+    & git -C $repo init --initial-branch=master --quiet
+    & git -C $repo -c user.email=t@t -c user.name=t add -A
+    & git -C $repo -c user.email=t@t -c user.name=t commit -q -m 'adr fixture'
+    return $repo
+}
