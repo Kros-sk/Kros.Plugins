@@ -69,10 +69,25 @@ function Get-TipCatalog([string]$StateDir, [string]$PluginRoot, [string]$Plugins
         return [pscustomobject]@{ tips = @(); config = $config }
     }
 
-    if ($null -ne $snapshot -and $null -ne $snapshot.tips) { $tips = @($tips) + @($snapshot.tips) }
+    # Authored copy is a channel, not a requirement. A skill carries its own description and
+    # that is the tip text; a second, hand-written copy of the same sentence was work nobody
+    # did - the catalog shipped eight authored tips and not one *.tip.json was ever written.
+    # With the switch off the packaged catalog, the fetched tips and a repository's .dev-tips
+    # are all passed over. The readers stay where they are, so turning the channel back on is
+    # a config change and not a revert.
+    $authoredOn = ($null -eq $config.authoredTips) -or [bool]$config.authoredTips
 
-    # Repository tips count as authored: they win over discovered copy for the same id.
-    $tips = @($tips) + @(Get-RepoTips -RepoRoot $RepoRoot)
+    if (-not $authoredOn)
+    {
+        $tips = @()
+    }
+    else
+    {
+        if ($null -ne $snapshot -and $null -ne $snapshot.tips) { $tips = @($tips) + @($snapshot.tips) }
+
+        # Repository tips count as authored: they win over discovered copy for the same id.
+        $tips = @($tips) + @(Get-RepoTips -RepoRoot $RepoRoot)
+    }
 
     $discovered = @()
     try

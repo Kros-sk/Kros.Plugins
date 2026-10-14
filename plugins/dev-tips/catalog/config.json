@@ -1,5 +1,6 @@
 {
   "cooldownDays": 2,
   "candidateCooldownHours": 12,
-  "delivery": "band"
+  "delivery": "band",
+  "authoredTips": false
 }
