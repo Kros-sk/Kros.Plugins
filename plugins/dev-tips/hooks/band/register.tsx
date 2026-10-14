@@ -241,7 +241,9 @@ export const register: Register = on => {
         )}
 
         {open && (
-          <Box gap={2}>
+          // A blank row above the answers: pressed against the body they read as part of the
+          // sentence rather than as a question being put to the person.
+          <Box gap={2} marginTop={1}>
             <Button key="show" label={doc ? 'Vysvetli mi to' : 'Ukáž ako'} hotkey="3" onPress={() => choose('show')} />
             <Button key="known" label={doc ? 'Poznám' : 'Už to používam'} hotkey="4" onPress={() => choose('known')} />
             {pending.url ? <Link href={pending.url} label="Dokumentácia" /> : null}

@@ -312,3 +312,98 @@ Druhý odsek hovorí o tom, aký prístup chceme v tímoch mať.
         @(Get-AdrTips -Root $dir).Count | Should -Be 0
     }
 }
+
+Describe 'Get-GuidelineTips and the rest of the document' {
+    # The band announces a guideline from its opening paragraph, so the body is always an excerpt -
+    # the same situation as a sectionless ADR, and expanding should show the rest.
+    It 'carries the whole document, with its headings as the outline' {
+        $repo = New-TempDir
+        $dir = Join-Path $repo 'docs/guidelines'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'workflow.md') -Encoding UTF8 -Value @'
+# Development Workflow
+
+This document defines the mandatory workflow.
+
+## Filename
+
+docs/design-docs/{issue}-{name}.md
+
+## Steps
+
+Always extract the issue number from the branch name.
+'@
+
+        $tip = @(Get-GuidelineTips -RepoRoot $repo)[0]
+
+        $tip.body | Should -Be 'This document defines the mandatory workflow.'
+        $tip.full | Should -Match 'Always extract the issue number' -Because 'expanding shows the rest'
+        $tip.full | Should -Match 'Filename' -Because 'without its heading a bare path says nothing'
+    }
+}
+
+Describe 'Get-DocumentProse and the shape of the expanded notice' {
+    # Joining every block with a blank line turned a document whose paragraphs are single lines -
+    # which a template mostly is - into a blank line after every line. The blank line marks a
+    # section; inside one, the lines sit together.
+    It 'puts a blank line before a section, not between every line' {
+        $repo = New-TempDir
+        $dir = Join-Path $repo 'docs/guidelines'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'template.md') -Encoding UTF8 -Value @'
+# Template
+
+Use this template for everything.
+
+## Filename
+
+docs/design-docs/{issue}-{name}.md
+
+Example: docs/design-docs/58061-payment.md
+
+## Steps
+
+Extract the issue number from the branch.
+'@
+
+        $full = @(Get-GuidelineTips -RepoRoot $repo)[0].full
+
+        $full | Should -Be @'
+Use this template for everything.
+
+Filename
+docs/design-docs/{issue}-{name}.md
+Example: docs/design-docs/58061-payment.md
+
+Steps
+Extract the issue number from the branch.
+'@.Replace("`r`n", "`n")
+    }
+}
+
+Describe 'ConvertTo-Prose and markup that is not text' {
+    It 'drops a horizontal rule and the fences around a code block' {
+        $repo = New-TempDir
+        $dir = Join-Path $repo 'docs/guidelines'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'fence.md') -Encoding UTF8 -Value @'
+# Fence
+
+Prvy odsek dokumentu.
+
+---
+
+## Template
+
+```markdown
+Ticket: docs/tickets/{issue}.md
+```
+'@
+
+        $full = @(Get-GuidelineTips -RepoRoot $repo)[0].full
+
+        $full | Should -Not -Match '(?m)^-{3,}$' -Because 'a horizontal rule is a line, not a sentence'
+        $full | Should -Not -Match '(?m)^markdown$' -Because 'the fence language is not content'
+        $full | Should -Match 'Ticket: docs/tickets' -Because 'what is inside the fence is the template itself'
+    }
+}

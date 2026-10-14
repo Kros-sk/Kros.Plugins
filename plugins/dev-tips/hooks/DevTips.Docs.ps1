@@ -81,6 +81,11 @@ function ConvertTo-Prose([string]$Block)
         if ($t.StartsWith('#') -or $t.StartsWith('|') -or $t.StartsWith('>')) { break }
         if ($t -match '^<!--') { continue }
 
+        # A rule and a fence are drawing, not text. The fence goes; what it wraps stays, because in
+        # a template document the fenced block is the substance.
+        if ($t -match '^(-{3,}|\*{3,}|_{3,})$') { continue }
+        if ($t -match '^(```|~~~)') { continue }
+
         # Numbered items lose their number for the same reason bullets lose their marker: flattened
         # into one line the numbers are markup, and the last one survives the trim as an orphan.
         $lines += ($t -replace '^(?:[-*+]|\d+[.)])\s+', '')
@@ -101,9 +106,7 @@ function Get-OpeningParagraph([string]$Text, [System.Text.RegularExpressions.Mat
     if (-not $Heading.Success) { return $null }
 
     $after = $Text.Substring($Heading.Index + $Heading.Length)
-    foreach ($para in ($after.Trim() -split '?
-\s*?
-'))
+    foreach ($para in ($after.Trim() -split '\r?\n\s*\r?\n'))
     {
         $prose = ConvertTo-Prose $para
         if (-not [string]::IsNullOrWhiteSpace($prose)) { return $prose }
@@ -117,17 +120,30 @@ function Get-DocumentProse([string]$Text, [System.Text.RegularExpressions.Match]
 {
     if (-not $Heading.Success) { return $null }
 
-    $blocks = @()
-    foreach ($para in ($Text.Substring($Heading.Index + $Heading.Length).Trim() -split '?
-\s*?
-'))
+    # A blank line marks a section, not every line. Most paragraphs in these documents are a single
+    # line - a path, an example, one rule - and separating all of them left the notice so airy that
+    # it read as a list of unrelated fragments.
+    $lines = @()
+    foreach ($para in ($Text.Substring($Heading.Index + $Heading.Length).Trim() -split '\r?\n\s*\r?\n'))
     {
+        # A heading keeps its words here, unlike in the announcement itself: dropped, a template's
+        # section leaves a bare path with nothing to say what the path is for.
+        $head = [regex]::Match($para.Trim(), '\A#{2,6}[ 	]+(.+?)\s*$')
+        if ($head.Success)
+        {
+            if ($lines.Count -gt 0) { $lines += '' }
+            $lines += (Remove-DocMarkup $head.Groups[1].Value)
+            continue
+        }
+
         $prose = ConvertTo-Prose $para
-        if (-not [string]::IsNullOrWhiteSpace($prose)) { $blocks += (Remove-DocMarkup $prose) }
+        if (-not [string]::IsNullOrWhiteSpace($prose)) { $lines += (Remove-DocMarkup $prose) }
     }
+
+    $blocks = @($lines | Where-Object { $_ -ne '' })
     if ($blocks.Count -eq 0) { return $null }
 
-    $all = $blocks -join "`n`n"
+    $all = ($lines -join "`n").Trim()
     if ($all.Length -le $MaxLength) { return $all }
 
     return $all.Substring(0, $MaxLength).TrimEnd() + [char]0x2026
@@ -208,27 +224,20 @@ function Get-GuidelineTips([string]$RepoRoot)
         $title = if (-not [string]::IsNullOrWhiteSpace($fm.title)) { $fm.title }
                  elseif ($heading.Success) { $heading.Groups[1].Value } else { $file.BaseName }
 
+        # A guideline that opens with a heading and no prose of its own says nothing a notice could
+        # carry, and announcing the next section's title would misrepresent it.
         $raw = $fm.tip
-        if ([string]::IsNullOrWhiteSpace($raw) -and $heading.Success)
-        {
-            $after = $text.Substring($heading.Index + $heading.Length)
-            foreach ($para in ($after.Trim() -split '\r?\n\s*\r?\n'))
-            {
-                $flat = ($para -replace '\s+', ' ').Trim()
-                if ([string]::IsNullOrWhiteSpace($flat)) { continue }
-
-                # A heading straight after a heading means the document opens with no prose of its
-                # own. Announcing the next section's title would misrepresent it, so say nothing.
-                if ($flat.StartsWith('#')) { break }
-                $raw = $flat
-                break
-            }
-        }
+        if ([string]::IsNullOrWhiteSpace($raw)) { $raw = Get-OpeningParagraph $text $heading }
         if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+
+        # The announcement is only the opening paragraph, so the body is always an excerpt and the
+        # rest belongs behind the expander - the same arrangement a sectionless ADR gets.
+        $full = Get-DocumentProse $text $heading
 
         $tips += [pscustomobject]@{
             id       = "guideline-$($file.BaseName)"
             kind     = 'guideline'
+            full     = $full
             title    = $title
             body     = ConvertTo-TipBody (Remove-DocMarkup $raw)
             ref      = "docs/guidelines/$($file.Name)"
