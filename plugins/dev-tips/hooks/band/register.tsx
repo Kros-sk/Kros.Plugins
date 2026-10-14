@@ -36,6 +36,8 @@ type Pending = {
   url: string | null
   installState: string
   stateDir: string
+  /** The whole document, for a notice whose body is only its opening. Absent for everything else. */
+  full?: string | null
   /** Written by the band the first time this handshake is drawn. */
   shownAt?: string
 }
@@ -230,7 +232,9 @@ export const register: Register = on => {
           </Box>
         </Box>
 
-        <Text dimColor={!open}>{pending.body}</Text>
+        {/* Expanding a document that was announced from its opening shows the rest of it. For a
+            skill, body and full say the same thing and the row is unchanged. */}
+        <Text dimColor={!open}>{open && pending.full ? pending.full : pending.body}</Text>
 
         {pending.ref && pending.installState === 'installed' && (
           <Text dimColor>Spúšťa sa cez {pending.ref}.</Text>

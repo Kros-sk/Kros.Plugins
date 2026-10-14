@@ -94,6 +94,45 @@ function ConvertTo-Prose([string]$Block)
     return (($joined -replace '\s+', ' ').Trim())
 }
 
+# A document's own opening: the first prose under its H1, past the metadata table these documents
+# carry. The guideline reader has always worked this way; a sectionless ADR is read the same.
+function Get-OpeningParagraph([string]$Text, [System.Text.RegularExpressions.Match]$Heading)
+{
+    if (-not $Heading.Success) { return $null }
+
+    $after = $Text.Substring($Heading.Index + $Heading.Length)
+    foreach ($para in ($after.Trim() -split '?
+\s*?
+'))
+    {
+        $prose = ConvertTo-Prose $para
+        if (-not [string]::IsNullOrWhiteSpace($prose)) { return $prose }
+    }
+    return $null
+}
+
+# Everything a document says, for the expanded notice: the same prose, in order, nothing dropped
+# except the markup. Capped, because the band is a band and not a reader.
+function Get-DocumentProse([string]$Text, [System.Text.RegularExpressions.Match]$Heading, [int]$MaxLength = 1400)
+{
+    if (-not $Heading.Success) { return $null }
+
+    $blocks = @()
+    foreach ($para in ($Text.Substring($Heading.Index + $Heading.Length).Trim() -split '?
+\s*?
+'))
+    {
+        $prose = ConvertTo-Prose $para
+        if (-not [string]::IsNullOrWhiteSpace($prose)) { $blocks += (Remove-DocMarkup $prose) }
+    }
+    if ($blocks.Count -eq 0) { return $null }
+
+    $all = $blocks -join "`n`n"
+    if ($all.Length -le $MaxLength) { return $all }
+
+    return $all.Substring(0, $MaxLength).TrimEnd() + [char]0x2026
+}
+
 function Get-AdrTips([string]$Root)
 {
     if ([string]::IsNullOrWhiteSpace($Root) -or -not (Test-Path -LiteralPath $Root)) { return @() }
@@ -118,6 +157,16 @@ function Get-AdrTips([string]$Root)
         {
             $raw = Get-SectionParagraph $text 'Kontext|Context'
         }
+        # No sections at all - ADR 0017 is Accepted and written as flat prose - so the document's
+        # own opening is the announcement, and the whole of it rides along for the expanded notice.
+        $full = $null
+        if ([string]::IsNullOrWhiteSpace($raw))
+        {
+            $heading = [regex]::Match($text, '(?m)^#[ 	]+(.+?)\s*$')
+            $raw = Get-OpeningParagraph $text $heading
+            if (-not [string]::IsNullOrWhiteSpace($raw)) { $full = Get-DocumentProse $text $heading }
+        }
+
         if ([string]::IsNullOrWhiteSpace($raw)) { continue }
 
         $title = if (-not [string]::IsNullOrWhiteSpace($fm.title)) { $fm.title } else { $file.BaseName }
@@ -125,6 +174,7 @@ function Get-AdrTips([string]$Root)
         $tips += [pscustomobject]@{
             id       = $file.BaseName
             kind     = 'adr'
+            full     = $full
             title    = $title
             body     = ConvertTo-TipBody (Remove-DocMarkup $raw)
             # The path inside the mirror, not the bare name: the band composes an absolute path

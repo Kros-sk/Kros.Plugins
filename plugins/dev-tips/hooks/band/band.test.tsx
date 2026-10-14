@@ -394,3 +394,27 @@ test('a guideline is pointed at in the repository, not in the mirror', async ($,
   expect(text).not.toMatch(/ako sa použ/)
   expect(text).not.toMatch(/dev-tips-state/)
 })
+
+test('a document with no sections shows its opening, and the whole of it once expanded', async ($, on) => {
+  const long = { ...DOC, body: 'Prvý odsek, ktorý sa zmestí do pásu.', full: 'Prvý odsek, ktorý sa zmestí do pásu.\n\nDruhý odsek, ktorý je vidieť až po rozbalení.' }
+  await given($, on, long)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /Druhý odsek/ })).toBeUndefined()
+  await ui.press({ key: 'open' })
+  expect(await ui.find({ type: 'Text', text: /Druhý odsek/ })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('a tip with no full text shows the same body expanded or not', async ($, on) => {
+  await given($, on, DOC)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+
+  expect(await ui.find({ type: 'Text', text: /CompanyId identifikuje/ })).toBeDefined()
+
+  await ui.unmount()
+})

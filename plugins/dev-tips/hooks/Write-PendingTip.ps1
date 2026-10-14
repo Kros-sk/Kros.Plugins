@@ -33,6 +33,8 @@ function Write-PendingTip([string]$SharedDir, [string]$StateDir, [string]$Sessio
         kind         = if ($Tip.kind) { $Tip.kind } else { 'tip' }
         title        = $Tip.title
         body         = $Tip.body
+        # Only a document announced from its opening has one; everything else sends null.
+        full         = $Tip.full
         ref          = $Tip.ref
         url          = $Tip.url
         source       = if ($Tip.source) { $Tip.source } else { 'packaged' }

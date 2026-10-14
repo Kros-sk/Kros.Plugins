@@ -266,3 +266,49 @@ Druhy odstavec nie je rozhodnutie.
         $body | Should -Be 'Pouzivame nasledovne pravidlo pre kazdy projekt.'
     }
 }
+
+Describe 'Get-AdrTips and an ADR written without sections' {
+    # ADR 0017 is Accepted and says something worth knowing, but it is flat prose under its H1 with
+    # no ## headings at all, so neither the decision nor the context fallback could reach it. It was
+    # announced to nobody. Such a document is announced from its own opening, and the band shows
+    # the whole of it once the person expands the notice.
+    It 'announces a sectionless document from its opening paragraph' {
+        $dir = New-TempDir
+        New-Adr $dir '0017-agenticky.md' @'
+---
+title: Agentický prístup k vývoju
+status: Accepted
+---
+
+# Agentický prístup k vývoju
+
+| Dátum | Status |
+|-------|--------|
+| 25.03.2026 | Accepted |
+
+Chceme, aby sme v plnej miere využívali AI pri vývoji všetkých našich produktov.
+
+Druhý odsek hovorí o tom, aký prístup chceme v tímoch mať.
+'@
+
+        $tip = @(Get-AdrTips -Root $dir)[0]
+
+        $tip.title | Should -Be 'Agentický prístup k vývoju'
+        $tip.body | Should -Be 'Chceme, aby sme v plnej miere využívali AI pri vývoji všetkých našich produktov.'
+        $tip.full | Should -Match 'Druhý odsek' -Because 'expanding the notice shows the whole document'
+    }
+
+    It 'carries no full text for a document that has a decision section' {
+        $dir = New-TempDir
+        New-Adr $dir '0001-sekcie.md' "---`ntitle: Sekcie`n---`n`n## Rozhodnutie`n`nRobíme to takto.`n"
+
+        @(Get-AdrTips -Root $dir)[0].full | Should -BeNullOrEmpty -Because 'the decision is the whole point of a sectioned ADR'
+    }
+
+    It 'still skips a document that has no prose anywhere' {
+        $dir = New-TempDir
+        New-Adr $dir '0040-prazdne.md' "---`ntitle: Prázdne`n---`n`n# Prázdne`n`n| a | b |`n|---|---|`n"
+
+        @(Get-AdrTips -Root $dir).Count | Should -Be 0
+    }
+}
