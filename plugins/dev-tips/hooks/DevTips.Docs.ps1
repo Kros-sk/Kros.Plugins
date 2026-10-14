@@ -55,10 +55,40 @@ function Get-SectionParagraph([string]$Text, [string]$HeadingPattern)
 
     foreach ($para in ($m.Groups[1].Value.Trim() -split '\r?\n\s*\r?\n'))
     {
-        $flat = ($para -replace '\s+', ' ').Trim()
-        if (-not [string]::IsNullOrWhiteSpace($flat)) { return $flat }
+        $prose = ConvertTo-Prose $para
+        if (-not [string]::IsNullOrWhiteSpace($prose)) { return $prose }
     }
     return $null
+}
+
+# One block of a document as one line of prose, or nothing when it is not prose at all.
+#
+# A sub-heading and a table row are not sentences: ADR 0018 opens its decision with `### Definície
+# pojmov` and a table, and announcing that heading tells the reader nothing. A list is prose once
+# the markers are gone - joined with a semicolon, because seven of the twenty real bodies kept an
+# interior `- ` when only the leading one was stripped.
+function ConvertTo-Prose([string]$Block)
+{
+    $lines = @()
+    foreach ($line in ($Block -split '\r?\n'))
+    {
+        $t = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($t)) { continue }
+        if ($t.StartsWith('#')) { return $null }
+        if ($t.StartsWith('|')) { return $null }
+        if ($t -match '^<!--') { continue }
+
+        # Numbered items lose their number for the same reason bullets lose their marker: flattened
+        # into one line the numbers are markup, and the last one survives the trim as an orphan.
+        $lines += ($t -replace '^(?:[-*+]|\d+[.)])\s+', '')
+    }
+
+    if ($lines.Count -eq 0) { return $null }
+
+    # Each item ends in its own full stop or not at all; a semicolon between them keeps one line
+    # readable without claiming the author wrote it as a sentence.
+    $joined = ($lines -join '; ') -replace '\.\s*;', '.'
+    return (($joined -replace '\s+', ' ').Trim())
 }
 
 function Get-AdrTips([string]$Root)
@@ -72,8 +102,19 @@ function Get-AdrTips([string]$Root)
         if ([string]::IsNullOrWhiteSpace($text)) { continue }
 
         $fm = Read-DocFrontMatter $text
-        $raw = if (-not [string]::IsNullOrWhiteSpace($fm.tip)) { $fm.tip }
-               else { Get-SectionParagraph $text 'Rozhodnutie|Decision' }
+        # The decision first, because that is what the ADR is for. Where it opens with a table or a
+        # sub-heading - 2 of the 22 real ones do - the context says the same thing in prose, and a
+        # true sentence from the context beats a heading from the decision. With neither, say
+        # nothing: the same treatment an ADR with no decision section already gets.
+        $raw = $fm.tip
+        if ([string]::IsNullOrWhiteSpace($raw)) { $raw = Get-SectionParagraph $text 'Rozhodnutie|Decision' }
+        # Only when the decision is there but says nothing a person can read. An ADR with no
+        # decision section at all is unfinished, and its context describes a problem, not a rule.
+        if ([string]::IsNullOrWhiteSpace($raw) -and $text -match '(?m)^##[ 	]*(?:Rozhodnutie|Decision)[ 	]*
+?$')
+        {
+            $raw = Get-SectionParagraph $text 'Kontext|Context'
+        }
         if ([string]::IsNullOrWhiteSpace($raw)) { continue }
 
         $title = if (-not [string]::IsNullOrWhiteSpace($fm.title)) { $fm.title } else { $file.BaseName }
@@ -83,7 +124,9 @@ function Get-AdrTips([string]$Root)
             kind     = 'adr'
             title    = $title
             body     = ConvertTo-TipBody (Remove-DocMarkup $raw)
-            ref      = $file.Name
+            # The path inside the mirror, not the bare name: the band composes an absolute path
+            # from the state directory and this, so the model can actually open the document.
+            ref      = "Adrs/$($file.Name)"
             repos    = @('*')
             maxShows = 1
             source   = 'docs'
@@ -151,10 +194,21 @@ function Get-GuidelineTips([string]$RepoRoot)
 #
 # Once only, and for the same reason the state merge is once only: a second pass would silence
 # every document written since the first, and those are exactly the ones worth announcing.
-function Initialize-DocsBaseline([string]$StateDir, $Tips, [string[]]$AnnounceAnyway)
+function Initialize-DocsBaseline([string]$StateDir, $Tips, [string[]]$AnnounceAnyway, [string]$Source = 'docs')
 {
-    $marker = Join-Path $StateDir '.docs-baseline'
-    if (Test-Path -LiteralPath $marker) { return }
+    # Per source, because the sources do not arrive together. Guidelines are read live from the
+    # repository; the ADR mirror is fetched by the Stop hook, so the first session on a fresh
+    # install sees guidelines and no ADRs at all. One shared marker would close the baseline on
+    # that partial set, and every ADR written before the install would then be announced as news -
+    # the backlog this function exists to prevent.
+    $marker = Join-Path $StateDir ".docs-baseline-$Source"
+    $spare = @($AnnounceAnyway | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    if (Test-Path -LiteralPath $marker)
+    {
+        Clear-BaselinedEntries -StateDir $StateDir -Ids $spare
+        return
+    }
 
     $keep = @{}
     $shown = Read-JsonFile (Join-Path $StateDir 'shown.json')
@@ -164,14 +218,15 @@ function Initialize-DocsBaseline([string]$StateDir, $Tips, [string[]]$AnnounceAn
     }
 
     $now = (Get-Date).ToUniversalTime().ToString('o')
-    $spare = @($AnnounceAnyway)
     foreach ($tip in @($Tips))
     {
         if ($spare -contains $tip.id) { continue }
         if ($keep.ContainsKey($tip.id)) { continue }
 
         $max = if ($null -ne $tip.maxShows) { [int]$tip.maxShows } else { 1 }
-        $keep[$tip.id] = [pscustomobject]@{ count = $max; last = $now; firstSeen = $now }
+        # Marked as the baseline's own doing, so naming the id in announceAnyway later can undo it.
+        # Without the mark there is no way to tell this apart from a tip the person was really shown.
+        $keep[$tip.id] = [pscustomobject]@{ count = $max; last = $now; firstSeen = $now; baselined = $true }
     }
 
     # The cooldown is carried through untouched: a baseline is bookkeeping, not a showing, and
@@ -183,4 +238,32 @@ function Initialize-DocsBaseline([string]$StateDir, $Tips, [string[]]$AnnounceAn
     })
 
     $now | Set-Content -LiteralPath $marker -Encoding UTF8
+}
+
+# Releases documents the baseline silenced, when somebody names them in `announceAnyway` later.
+#
+# Without this the one operational lever the feature has works on the first run and is inert for
+# ever after, with no error and no log line to say so. Only entries the baseline itself wrote are
+# touched: a document the person was really shown stays shown.
+function Clear-BaselinedEntries([string]$StateDir, [string[]]$Ids)
+{
+    if ($null -eq $Ids -or $Ids.Count -eq 0) { return }
+
+    $shown = Read-JsonFile (Join-Path $StateDir 'shown.json')
+    if ($null -eq $shown -or $null -eq $shown.entries) { return }
+
+    $keep = @{}
+    $released = $false
+    foreach ($p in $shown.entries.PSObject.Properties)
+    {
+        if (($Ids -contains $p.Name) -and $p.Value.baselined) { $released = $true; continue }
+        $keep[$p.Name] = $p.Value
+    }
+    if (-not $released) { return }
+
+    Write-JsonFile (Join-Path $StateDir 'shown.json') ([pscustomobject]@{
+        lastShownAt     = $shown.lastShownAt
+        lastCandidateAt = $shown.lastCandidateAt
+        entries         = [pscustomobject]$keep
+    })
 }

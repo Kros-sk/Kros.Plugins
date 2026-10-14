@@ -109,6 +109,11 @@ function New-FixtureAdrRepo
     @('---', 'title: Prvé rozhodnutie', '---', '', '## Rozhodnutie', '', 'Robíme to takto.') |
         Set-Content -LiteralPath (Join-Path $dir '0001-prve.md') -Encoding UTF8
 
+    # A name with diacritics, because 20 of the 22 real ADRs have one and git quotes such paths in
+    # ls-tree output. A fixture with ASCII names only cannot catch that.
+    @('---', 'title: Druhé rozhodnutie', '---', '', '## Rozhodnutie', '', 'Toto tiež.') |
+        Set-Content -LiteralPath (Join-Path $dir '0002-Nepoužívame-MassTransit.md') -Encoding UTF8
+
     & git -C $repo init --initial-branch=master --quiet
     & git -C $repo -c user.email=t@t -c user.name=t add -A
     & git -C $repo -c user.email=t@t -c user.name=t commit -q -m 'adr fixture'

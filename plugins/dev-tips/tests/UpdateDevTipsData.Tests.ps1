@@ -99,3 +99,18 @@ Describe 'Update-DevTipsData.ps1 and the ADR mirror' {
         Test-Path -LiteralPath (Join-Path $stateDir 'adr.stamp') | Should -BeTrue
     }
 }
+
+Describe 'Export-MirrorFiles and names git quotes' {
+    # git ls-tree quotes any path with non-ASCII bytes unless told otherwise, and the quoted form
+    # ends in a double quote, so a '\.md$' filter rejects it. 20 of the 22 real ADRs are named in
+    # Slovak, so this is the normal case and not an edge one.
+    It 'writes out a document whose name carries diacritics' {
+        $stateDir = New-TempDir
+
+        & pwsh -NoProfile -File $script:Script -StateDir $stateDir -ProjectsRoot (New-FakeTranscripts) `
+               -AdrOrigin (New-FixtureAdrRepo)
+
+        Test-Path -LiteralPath (Join-Path $stateDir 'adr/Adrs/0002-Nepoužívame-MassTransit.md') |
+            Should -BeTrue -Because 'the house names ADRs in Slovak'
+    }
+}

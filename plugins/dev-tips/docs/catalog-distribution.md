@@ -121,11 +121,33 @@ Sources are merged by `id`, with fixed precedence:
 
 | Field group | Winner | Why |
 |---|---|---|
-| copy — `title`, `body`, `maxShows`, `repos`, `when` | the authored `tip.json`, else the discovered default | curation is optional, not a precondition |
+| copy — `title`, `body`, `maxShows`, `repos`, `when` | derived from the thing itself; see "Where the words come from" | nobody keeps a second copy in step with the first |
 | install state — installed / marketplace-only / missing | always local inspection | the remote source cannot know what this machine has |
 
-A tip with no catalog entry still works, worded from frontmatter. A catalog entry only improves the
-wording.
+## Where the words come from
+
+Nobody writes a tip. The authored `tip.json` channel is retired (`authoredTips: false`, D18) and
+the text is taken from the thing it describes:
+
+| What | Title | Body |
+|---|---|---|
+| skill, command, agent | its `name` | `description:` in its `SKILL.md` |
+| ADR | `title:` in its front matter | first prose block of `## Rozhodnutie`, else of `## Kontext` |
+| guideline | its `# H1` | the first prose paragraph under it |
+
+A block that is a heading or a table row is not prose and is passed over; a document with no prose
+anywhere is not announced at all. Where the prose will not trim into one line, the document may
+carry a single `tip:` line in its own front matter, and that wins. It lives in the document, never
+in a file of its own.
+
+ADRs are fetched shallow from `Kros-sk/Kros.ADR` by the detached refresh and written out under the
+state directory, because the mirror git keeps is bare. Guidelines are read live from
+`docs/guidelines` in the repository being worked in.
+
+A document is announced **once** (`maxShows: 1`) and carries no usage suppression: a rule is not
+run and nobody already uses one. Everything that exists when a source is first seen is recorded as
+already announced, per source, so only what lands afterwards is news; the ids in `announceAnyway`
+are the exception and can be named later to release a document the baseline silenced.
 
 ## Authoring and validation
 
@@ -134,10 +156,9 @@ wording.
 One small JSON per tool, next to the tool, written by the tool's author in the same pull request:
 
 ```
-plugins/kros-shared/skills/git-diff/tip.json
-plugins/kros-shared/commands/commit.tip.json
-plugins/teapie/skills/teapie/tip.json
-dev-tips/manual.json            <- tips about things that have no SKILL.md here
+plugins/kros-shared/skills/git-diff/SKILL.md    <- its description is the tip
+plugins/kros-shared/commands/commit.md          <- its description is the tip
+dev-tips/config.json                            <- policy only; no tips are authored
 ```
 
 A separate file rather than a `tip:` block in the `SKILL.md` frontmatter: that frontmatter is parsed
@@ -190,9 +211,13 @@ Ways of publishing a generated catalog, and why none of them is used:
 
 ### Validation runs on the pull request
 
-A validation workflow fails a pull request when:
+There is no tip validator any more: with nothing authored there is no schema to break. What a pull
+request can still get wrong is a `description` that reads as a paragraph, and that is caught by the
+240-character trim rather than by a gate.
 
-- a `tip.json` does not match the schema, or an `id` collides,
+The retired validator failed a pull request when:
+
+- a `tip.json` did not match the schema, or an `id` collided,
 - `title` or `body` exceeds its length limit — the notice is two lines, and without a limit someone
   will write a paragraph,
 - `ref` points at a skill or command that does not exist in the repository.
@@ -325,11 +350,11 @@ must start. Somebody who does not open Claude Code for a week receives nothing, 
 
 ```
 Kros.AiDevTools @ master                        the only place tips are written
-  plugins/<plugin>/skills/<skill>/tip.json      authored by hand
-  plugins/<plugin>/commands/<cmd>.tip.json      authored by hand
-  dev-tips/manual.json                          authored by hand
-  dev-tips/config.json                          authored by hand
-  .github/workflows/dev-tips-validate.yml       validator, pull requests only
+  plugins/<plugin>/skills/<skill>/SKILL.md      its own description is the tip
+  dev-tips/config.json                          policy only
+
+Kros.ADR @ master                               the rules, fetched the same way
+  Adrs/*.md                                     title + decision are the announcement
 
 <any product repo>
   .dev-tips/*.json                              authored by hand, read live

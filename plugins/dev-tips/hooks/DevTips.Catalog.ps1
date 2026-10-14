@@ -104,15 +104,34 @@ function Get-TipCatalog([string]$StateDir, [string]$PluginRoot, [string]$Plugins
     # what keeps the backlog of everything written so far from eating it.
     if ($null -eq $config.announceDocs -or [bool]$config.announceDocs)
     {
+        $spare = @($config.announceAnyway)
         $docs = @()
-        try { $docs += @(Get-AdrTips -Root (Join-Path $StateDir 'adr/Adrs')) } catch { }
-        try { $docs += @(Get-GuidelineTips -RepoRoot $RepoRoot) } catch { }
 
-        if ($docs.Count -gt 0)
+        # Each source baselines on its own, and only when it actually produced something: a source
+        # that is not there yet must not be recorded as having been seen and found empty.
+        foreach ($source in @(
+            @{ name = 'adr';       tips = { Get-AdrTips -Root (Join-Path $StateDir 'adr/Adrs') } }
+            @{ name = 'guideline'; tips = { Get-GuidelineTips -RepoRoot $RepoRoot } }
+        ))
         {
-            Initialize-DocsBaseline -StateDir $StateDir -Tips $docs -AnnounceAnyway @($config.announceAnyway)
-            $discovered = @($discovered) + @($docs)
+            $found = @()
+            try { $found = @(& $source.tips) } catch { $found = @() }
+            if ($found.Count -eq 0) { continue }
+
+            try
+            {
+                Initialize-DocsBaseline -StateDir $StateDir -Source $source.name -Tips $found -AnnounceAnyway $spare
+            }
+            catch
+            {
+                # The baseline writes shown.json. If that write fails, offering the documents anyway
+                # would announce the whole backlog, so this source sits out the session instead.
+                continue
+            }
+            $docs += $found
         }
+
+        if ($docs.Count -gt 0) { $discovered = @($discovered) + @($docs) }
     }
 
     return [pscustomobject]@{ tips = (Merge-Tips -Authored $tips -Discovered $discovered); config = $config }

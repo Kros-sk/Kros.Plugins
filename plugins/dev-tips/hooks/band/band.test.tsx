@@ -354,3 +354,43 @@ test('a skill still says what a skill says', async ($, on) => {
 
   await ui.unmount()
 })
+
+test('asking about a rule asks what it says, and says where it is', async ($, on) => {
+  const asked: string[] = []
+  on('prompt.submit', (_$: unknown, e: { text: string }) => {
+    asked.push(e.text)
+
+    return { text: e.text }
+  })
+  await given($, on, { ...DOC, ref: 'Adrs/0018-CompanyId.md' }, { quiet: true })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+  await ui.press({ key: 'show' })
+  await ui.unmount()
+
+  const text = asked.join('\n')
+  expect(text).not.toMatch(/ako sa použ/)
+  expect(text).toMatch(/CompanyId vs TenantId/)
+  expect(text).toMatch(/adr\/Adrs\/0018-CompanyId\.md/)
+})
+
+test('a guideline is pointed at in the repository, not in the mirror', async ($, on) => {
+  const asked: string[] = []
+  on('prompt.submit', (_$: unknown, e: { text: string }) => {
+    asked.push(e.text)
+
+    return { text: e.text }
+  })
+  await given($, on, { ...DOC, kind: 'guideline', title: 'Development Workflow', ref: 'docs/guidelines/workflow.md' }, { quiet: true })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+  await ui.press({ key: 'show' })
+  await ui.unmount()
+
+  const text = asked.join('\n')
+  expect(text).toMatch(/docs\/guidelines\/workflow\.md/)
+  expect(text).not.toMatch(/ako sa použ/)
+  expect(text).not.toMatch(/dev-tips-state/)
+})

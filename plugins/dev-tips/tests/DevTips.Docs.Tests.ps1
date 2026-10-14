@@ -82,6 +82,19 @@ Nič.
         @(Get-AdrTips -Root $dir)[0].body | Should -Be 'Robíme to takto.'
     }
 
+    # ADR 0018's decision is a numbered list. Flattened with the numbers left in, the body ended
+    # "...mapuje na CompanyId. 3." - an orphan enumerator, the same defect as a dangling bullet.
+    It 'does not leave an orphan number where a numbered list was cut' {
+        $dir = New-TempDir
+        $items = 1..8 | ForEach-Object { "$_. Polozka cislo $_ popisuje nieco dolezite a zrozumitelne." }
+        New-Adr $dir '0018-cisla.md' ("---`ntitle: Cisla`n---`n`n## Rozhodnutie`n`n" + ($items -join "`n") + "`n")
+
+        $body = @(Get-AdrTips -Root $dir)[0].body
+
+        $body.TrimEnd() | Should -Not -Match '\d+\.$' -Because 'a trailing list number is markup, not a sentence'
+        $body | Should -Not -Match '^\d+\.\s' -Because 'the first item should not open with its number either'
+    }
+
     # The band draws Text, not markdown. A decision written as **this** would reach the person
     # with the asterisks still in it, and ADR 0002 is written exactly that way.
     It 'strips the markup the document wrote for a renderer the band does not have' {
@@ -90,6 +103,80 @@ Nič.
         New-Adr $dir '0002-teapie.md' "---`ntitle: TeaPie`n---`n`n## Rozhodnutie`n`n$body`n"
 
         @(Get-AdrTips -Root $dir)[0].body | Should -Be 'Prechod na TeaPie framework pre integračné testy.'
+    }
+
+    # The band composes a path from the state directory and this ref, so a bare file name leaves
+    # the model hunting for a file it has no directory for.
+    It 'refers to the ADR by its path inside the mirror, not by its bare name' {
+        $dir = New-TempDir
+        New-Adr $dir '0018-CompanyId.md' "---`ntitle: X`n---`n`n## Rozhodnutie`n`nRobime to takto.`n"
+
+        @(Get-AdrTips -Root $dir)[0].ref | Should -Be 'Adrs/0018-CompanyId.md'
+    }
+
+    # ADR 0018 - one of the two the config names as worth announcing - opens its decision with a
+    # sub-heading and then a table. Announcing "### Definicie pojmov" tells the person nothing.
+    It 'passes over a sub-heading and a table to find prose' {
+        $dir = New-TempDir
+        New-Adr $dir '0018-CompanyId.md' @'
+---
+title: CompanyId vs TenantId
+---
+
+## Kontext
+
+V systemoch dochadza k nedorozumeniam okolo pojmov.
+
+## Rozhodnutie
+
+### Definicie pojmov
+
+| Pojem | Vyznam |
+|-------|--------|
+| CompanyId | Identifikator spolocnosti. |
+'@
+
+        $body = @(Get-AdrTips -Root $dir)[0].body
+
+        $body | Should -Not -Match '^#' -Because 'a heading is not a sentence'
+        $body | Should -Not -Match '^\|' -Because 'a table row is not a sentence either'
+        $body | Should -Be 'V systemoch dochadza k nedorozumeniam okolo pojmov.'
+    }
+
+    It 'skips the document when neither the decision nor the context has prose' {
+        $dir = New-TempDir
+        New-Adr $dir '0050-tabulka.md' "---`ntitle: Iba tabulka`n---`n`n## Rozhodnutie`n`n| a | b |`n|---|---|`n"
+
+        @(Get-AdrTips -Root $dir).Count | Should -Be 0
+    }
+
+    # 7 of the 20 real bodies carried an interior " - " and three were cut after "napr.", leaving an
+    # unclosed bracket. Both pass the existing first-character and last-character assertions.
+    It 'joins a list into prose instead of leaving the markers in the middle' {
+        $dir = New-TempDir
+        $list = "- Prvá vec je takáto.`n- Druhá vec je onaká.`n- Tretia vec je iná."
+        New-Adr $dir '0005-zoznam.md' "---`ntitle: Zoznam`n---`n`n## Rozhodnutie`n`n$list`n"
+
+        $body = @(Get-AdrTips -Root $dir)[0].body
+
+        $body | Should -Not -Match ' - ' -Because 'a flattened list reads as prose or not at all'
+    }
+
+    It 'does not cut after an abbreviation, leaving a bracket open' {
+        $dir = New-TempDir
+        # Long enough that the 240 cap actually cuts, with "napr." as the last sentence end before
+        # it - which is how three of the real bodies ended up truncated mid-clause.
+        $text = 'Zaviedli sme pravidlo, ktoré platí všade a popisuje veci veľmi zoširoka. ' +
+                'Druhá veta hovorí o module Invoicing a o module Framework a aj o ďalších (napr. ' +
+                'v Účtovníctve a v ERP a v iných systémoch, ktoré používame na rôznych projektoch a v tímoch), ' +
+                'čo presne tým myslíme a prečo to tak je.'
+        New-Adr $dir '0004-skratka.md' "---`ntitle: Skratka`n---`n`n## Rozhodnutie`n`n$text`n"
+
+        $body = @(Get-AdrTips -Root $dir)[0].body
+
+        $body | Should -Not -Match '\(napr\.$' -Because 'a cut after an abbreviation leaves the bracket open'
+        ($body.ToCharArray() | Where-Object { $_ -eq '(' }).Count |
+            Should -Be ($body.ToCharArray() | Where-Object { $_ -eq ')' }).Count -Because 'brackets must balance'
     }
 
     # Asserted the way DevTips.RepoTips.Tests.ps1 asserts it, and for the reason the comment in

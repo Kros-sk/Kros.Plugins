@@ -234,3 +234,60 @@ Describe 'Initialize-DocsBaseline' {
             Should -Be ([datetime]'2026-10-12T06:25:33Z').ToUniversalTime()
     }
 }
+
+Describe 'Initialize-DocsBaseline across sources that arrive at different times' {
+    # The guidelines are read live from the repository; the ADRs arrive only after the Stop hook has
+    # fetched the mirror, so the first session on a fresh install sees guidelines and no ADRs. One
+    # shared marker would close the baseline on that partial set and every ADR written before the
+    # install would then be announced as news - the backlog the baseline exists to prevent.
+    It 'does not let one source close the baseline for another' {
+        $state = New-TempDir
+
+        Initialize-DocsBaseline -StateDir $state -Source 'guideline' -AnnounceAnyway @() `
+                                -Tips @([pscustomobject]@{ id = 'guideline-workflow'; maxShows = 1 })
+        Initialize-DocsBaseline -StateDir $state -Source 'adr' -AnnounceAnyway @() `
+                                -Tips @([pscustomobject]@{ id = '0001-stary'; maxShows = 1 })
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.'0001-stary'.count | Should -Be 1 -Because 'an ADR that predates the install is not news'
+    }
+
+    It 'still runs only once per source' {
+        $state = New-TempDir
+
+        Initialize-DocsBaseline -StateDir $state -Source 'adr' -AnnounceAnyway @() `
+                                -Tips @([pscustomobject]@{ id = 'a'; maxShows = 1 })
+        Initialize-DocsBaseline -StateDir $state -Source 'adr' -AnnounceAnyway @() `
+                                -Tips @([pscustomobject]@{ id = 'b'; maxShows = 1 })
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.PSObject.Properties['b'] | Should -BeNullOrEmpty
+    }
+
+    # The one operational lever this feature has. Adding an id later must do something, or the
+    # person pulling it has no way to tell that it did not.
+    It 'releases a document the baseline had silenced when it is named later' {
+        $state = New-TempDir
+        $tips = @([pscustomobject]@{ id = '0021-pravidla'; maxShows = 1 })
+
+        Initialize-DocsBaseline -StateDir $state -Source 'adr' -Tips $tips -AnnounceAnyway @()
+        Initialize-DocsBaseline -StateDir $state -Source 'adr' -Tips $tips -AnnounceAnyway @('0021-pravidla')
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.PSObject.Properties['0021-pravidla'] | Should -BeNullOrEmpty -Because 'the lever has to work after the first run too'
+    }
+
+    It 'does not release a document the person has actually been shown' {
+        $state = New-TempDir
+        ([pscustomobject]@{
+            lastShownAt = '2026-10-12T06:25:33Z'
+            entries = [pscustomobject]@{ '0021-pravidla' = [pscustomobject]@{ count = 1; last = '2026-10-12T06:25:33Z'; firstSeen = '2026-10-12T06:25:33Z' } }
+        }) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $state 'shown.json') -Encoding UTF8
+
+        Initialize-DocsBaseline -StateDir $state -Source 'adr' -AnnounceAnyway @('0021-pravidla') `
+                                -Tips @([pscustomobject]@{ id = '0021-pravidla'; maxShows = 1 })
+
+        $shown = Get-Content -LiteralPath (Join-Path $state 'shown.json') -Raw | ConvertFrom-Json
+        $shown.entries.'0021-pravidla'.count | Should -Be 1 -Because 'a real showing is not the baseline silencing it'
+    }
+}

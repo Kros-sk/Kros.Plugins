@@ -145,12 +145,18 @@ async function recordAnswer($: any, pending: Pending, answer: Answer) {
   if (answer === 'show') {
     // The same call the engine makes for a typed prompt, so it becomes a turn of its own
     // once the session is idle. The model reads it as this plugin's, not as the person's.
-    const what = pending.ref ?? pending.title
+    // A rule is read, not run. Asking how it is "used" is the wording D18 retired, and the
+    // model cannot find the document either unless it is told where it is: an ADR lives in the
+    // mirror under the state directory, a guideline in the repository the person is working in.
+    const text = isDocument(pending)
+      ? pending.kind === 'adr'
+        ? `Vysvetli mi, čo hovorí „${pending.title}" a čo to znamená pre moju prácu. Dokument je v ${pending.stateDir}/adr/${pending.ref}.`
+        : `Vysvetli mi, čo hovorí „${pending.title}" a čo to znamená pre moju prácu. Dokument je v ${pending.ref} v tomto repozitári.`
+      : `Ukáž mi, ako sa používa ${pending.ref ?? pending.title}, a na čo je to dobré.`
+
     // Caught, not voided: where nothing can take a prompt the press must still be recorded
     // and the band must stay standing.
-    void $.prompt
-      .submit({ text: `Ukáž mi, ako sa používa ${what}, a na čo je to dobré.` })
-      .catch(() => undefined)
+    void $.prompt.submit({ text }).catch(() => undefined)
   }
 
   // Usage suppression answers "do not offer me a tool I already run". A rule has nothing to run,

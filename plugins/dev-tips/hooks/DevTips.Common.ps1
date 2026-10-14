@@ -154,9 +154,17 @@ function Read-JsonFile([string]$Path)
     return $raw | ConvertFrom-Json
 }
 
+# Written beside the target and moved into place, the way Write-PendingTip and Write-RemoteSnapshot
+# already do it.
+#
+# Set-Content truncates and then writes. shown.json holds every count, every firstSeen and the
+# cooldown, so a process that dies in that gap loses the lot and the developer sees tips they have
+# already answered. The move is the one step that is atomic on both filesystems we run on.
 function Write-JsonFile([string]$Path, $Value)
 {
-    $Value | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding UTF8
+    $temp = "$Path.$PID.tmp"
+    $Value | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $temp -Encoding UTF8
+    Move-Item -LiteralPath $temp -Destination $Path -Force
 }
 
 function Get-SessionId($Payload)

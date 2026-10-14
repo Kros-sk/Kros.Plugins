@@ -7,7 +7,26 @@ function Invoke-Git([string[]]$GitArgs)
     # Prompting must be impossible: a hidden process with no console would hang forever holding the
     # lock, and debug.log would never get a line because the script never reached one.
     $env:GIT_TERMINAL_PROMPT = '0'
-    $out = & git -c credential.interactive=false -c core.askPass= @GitArgs 2>&1
+
+    # git writes paths as UTF-8; PowerShell decodes a child's output with the console encoding,
+    # which in a detached refresh or under a test runner is whatever the machine's codepage is.
+    # Without this a Slovak file name comes back mangled and the document is written under a name
+    # nothing will look for again.
+    $wasEncoding = [Console]::OutputEncoding
+    try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+    # core.quotePath=false: git otherwise escapes any path with non-ASCII bytes and wraps it in
+    # double quotes, so `ls-tree` hands back "Adrs/0001-Nepou\305\276..." and every filter on an
+    # extension misses it. Twenty of the twenty-two ADRs are named in Slovak, so that is the normal
+    # case here, not an edge one. It belongs on every call rather than on the one that noticed.
+    try
+    {
+        $out = & git -c credential.interactive=false -c core.askPass= -c core.quotePath=false @GitArgs 2>&1
+    }
+    finally
+    {
+        try { [Console]::OutputEncoding = $wasEncoding } catch { }
+    }
+
     return [pscustomobject]@{ ok = ($LASTEXITCODE -eq 0); output = ($out -join "`n") }
 }
 

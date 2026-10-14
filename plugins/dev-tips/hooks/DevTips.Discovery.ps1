@@ -61,7 +61,23 @@ function ConvertTo-TipBody([string]$Text, [int]$MaxLength = 240)
     # sentence that fits, as long as it leaves something worth reading.
     $window = $Text.Substring(0, $MaxLength)
     $cut = -1
-    foreach ($m in [regex]::Matches($window, '[.!?](\s|$)')) { $cut = $m.Index }
+    foreach ($m in [regex]::Matches($window, '[.!?](\s|$)'))
+    {
+        # A Slovak abbreviation ends in a full stop and is not the end of anything: three real ADR
+        # bodies were cut after "(napr." and reached the reader with the bracket still open. A
+        # lowercase word of four letters or fewer before the stop is an abbreviation, not a sentence.
+        # -cmatch, not -match: PowerShell matches case-insensitively by default, and under that
+        # \p{Ll} folds and matches "CLI" too, which cut every sentence ending in an acronym.
+        if ($window[$m.Index] -eq '.' -and
+            $window.Substring(0, $m.Index) -cmatch '(?:^|[\s(])\p{Ll}{1,4}$') { continue }
+
+        $candidate = $window.Substring(0, $m.Index + 1)
+        $opens = ($candidate.ToCharArray() | Where-Object { $_ -eq '(' }).Count
+        $closes = ($candidate.ToCharArray() | Where-Object { $_ -eq ')' }).Count
+        if ($opens -ne $closes) { continue }
+
+        $cut = $m.Index
+    }
     if ($cut -ge 60) { return $window.Substring(0, $cut + 1) }
 
     $space = $window.LastIndexOf(' ')
