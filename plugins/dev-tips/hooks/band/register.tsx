@@ -19,6 +19,14 @@ const sessionId = atom({ plugin: 'dev-tips', key: 'sessionId' } as const, null)
 const isOpen = atom({ plugin: 'dev-tips', key: 'isOpen' } as const, false)
 const answeredId = atom({ plugin: 'dev-tips', key: 'answeredId' } as const, null)
 
+/**
+ * A rule rather than a tool: an ADR or a guideline. It is not run and nobody "already uses" it,
+ * so the band asks about it in different words and records the answer without a suppression.
+ */
+function isDocument(pending: Pending) {
+  return pending.kind === 'adr' || pending.kind === 'guideline'
+}
+
 type Pending = {
   id: string
   kind: string
@@ -145,7 +153,9 @@ async function recordAnswer($: any, pending: Pending, answer: Answer) {
       .catch(() => undefined)
   }
 
-  if (answer !== 'known') return
+  // Usage suppression answers "do not offer me a tool I already run". A rule has nothing to run,
+  // and maxShows: 1 already keeps it from coming back.
+  if (answer !== 'known' || isDocument(pending)) return
 
   try {
     let usage: Record<string, string> = {}
@@ -184,6 +194,9 @@ export const register: Register = on => {
     if ((await read($, answeredId)) === pending.id) return beneath
 
     const open = await read($, isOpen)
+    // A rule is not a tool: same two presses, so answers stay comparable across kinds, but the
+    // words have to be true of what is on screen.
+    const doc = isDocument(pending)
     const { Box, Button, Link, Text } = $.ui.resolve(e)
     const choose = async (value: Answer) => {
       await update($, answeredId, () => pending.id)
@@ -219,8 +232,8 @@ export const register: Register = on => {
 
         {open && (
           <Box gap={2}>
-            <Button key="show" label="Ukáž ako" hotkey="3" onPress={() => choose('show')} />
-            <Button key="known" label="Už to používam" hotkey="4" onPress={() => choose('known')} />
+            <Button key="show" label={doc ? 'Vysvetli mi to' : 'Ukáž ako'} hotkey="3" onPress={() => choose('show')} />
+            <Button key="known" label={doc ? 'Poznám' : 'Už to používam'} hotkey="4" onPress={() => choose('known')} />
             {pending.url ? <Link href={pending.url} label="Dokumentácia" /> : null}
           </Box>
         )}

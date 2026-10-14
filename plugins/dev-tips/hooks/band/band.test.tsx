@@ -301,3 +301,56 @@ test('drawing through the fallback marks the handshake, so the next session leav
 
   expect(JSON.parse(writes[OTHER]).shownAt).toBeDefined()
 })
+
+/**
+ * A rule rather than a tool. It has nothing to install and nothing to run, so `Get-InstallState`
+ * hands over `n/a` and the band has to say something true about it.
+ */
+const DOC = {
+  id: '0018-CompanyId',
+  kind: 'adr',
+  title: 'CompanyId vs TenantId',
+  body: 'CompanyId identifikuje spoločnosť, TenantId zákazníka.',
+  ref: '0018-CompanyId.md',
+  url: null,
+  installState: 'n/a',
+  stateDir: `${HOME}/.claude/plugins/data/dev-tips-state`,
+}
+
+test('a document is offered to be read, not to be run', async ($, on) => {
+  await given($, on, DOC)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+
+  expect(await ui.find({ type: 'Button', text: 'Už to používam' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: 'Poznám' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: 'Vysvetli mi to' })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('knowing a rule writes no usage suppression, because a rule is not a tool', async ($, on) => {
+  const writes = writesOf(on)
+  await given($, on, DOC)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+  await ui.press({ key: 'known' })
+  await ui.unmount()
+
+  expect(writes[`${DOC.stateDir}/usage.json`]).toBeUndefined()
+  expect(writes[`${DOC.stateDir}/answers.log`]).toBeDefined()
+})
+
+test('a skill still says what a skill says', async ($, on) => {
+  await given($, on)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+
+  expect(await ui.find({ type: 'Button', text: 'Už to používam' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: 'Ukáž ako' })).toBeDefined()
+
+  await ui.unmount()
+})
