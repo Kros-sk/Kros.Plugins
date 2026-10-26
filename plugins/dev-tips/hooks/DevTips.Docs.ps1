@@ -95,7 +95,9 @@ function ConvertTo-Prose([string]$Block)
 
     # Each item ends in its own full stop or not at all; a semicolon between them keeps one line
     # readable without claiming the author wrote it as a sentence.
-    $joined = ($lines -join '; ') -replace '\.\s*;', '.'
+    # A line that already ends in punctuation does not take a semicolon after it. Without the colon
+    # here, ADR 0007 was announced as "...a CQS-light:; Čítanie: ...".
+    $joined = ($lines -join '; ') -replace '([.:!?])\s*;', '$1'
     return (($joined -replace '\s+', ' ').Trim())
 }
 

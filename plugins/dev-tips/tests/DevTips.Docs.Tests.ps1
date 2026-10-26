@@ -407,3 +407,18 @@ Ticket: docs/tickets/{issue}.md
         $full | Should -Match 'Ticket: docs/tickets' -Because 'what is inside the fence is the template itself'
     }
 }
+
+Describe 'ConvertTo-Prose and a line that already ends in punctuation' {
+    # Joining list items with "; " after a line that ends in a colon produced ":;" - ADR 0007 is
+    # announced as "...podla capability a CQS-light:; Citanie: ...".
+    It 'does not add a semicolon to a line that ends in a colon' {
+        $dir = New-TempDir
+        $body = "Zavadzame toto:`n- Citanie: Provider.`n- Zapis: Writer."
+        New-Adr $dir '0007-rozhrania.md' "---`ntitle: Rozhrania`n---`n`n## Rozhodnutie`n`n$body`n"
+
+        $text = @(Get-AdrTips -Root $dir)[0].body
+
+        $text | Should -Not -Match ':\s*;' -Because 'a colon already joins what follows it'
+        $text | Should -Be 'Zavadzame toto: Citanie: Provider. Zapis: Writer.'
+    }
+}
