@@ -420,6 +420,7 @@ test('a tip with no full text shows the same body expanded or not', async ($, on
 })
 
 test('a guideline is named by its own repository, not by whichever one is on screen', async ($, on) => {
+  on('session.root', () => ({ value: 'C:/src/Invoicing' }))
   const asked: string[] = []
   on('prompt.submit', (_$: unknown, e: { text: string }) => {
     asked.push(e.text)
@@ -459,4 +460,62 @@ test('a guideline whose handshake predates the repository being recorded still s
   await ui.unmount()
 
   expect(asked.join('\n')).toMatch(/docs\/guidelines\/workflow\.md/)
+})
+
+test('a guideline picked in another repository is not drawn here', async ($, on) => {
+  on('session.root', () => ({ value: 'C:/src/Kros.Plugins' }))
+  await given($, on, {
+    ...DOC,
+    kind: 'guideline',
+    title: 'Development Workflow',
+    body: 'Toto je pravidlo Invoicingu.',
+    ref: 'docs/guidelines/workflow.md',
+    repoRoot: 'C:/src/Invoicing',
+  })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /Toto je pravidlo Invoicingu/ })).toBeUndefined()
+
+  await ui.unmount()
+})
+
+test('a tip picked in this repository is drawn', async ($, on) => {
+  on('session.root', () => ({ value: 'C:/src/Invoicing' }))
+  await given($, on, {
+    ...DOC,
+    kind: 'guideline',
+    title: 'Development Workflow',
+    body: 'Toto je pravidlo Invoicingu.',
+    ref: 'docs/guidelines/workflow.md',
+    repoRoot: 'C:/src/Invoicing',
+  })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /Toto je pravidlo Invoicingu/ })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('a handshake written before the repository was recorded is still drawn', async ($, on) => {
+  on('session.root', () => ({ value: 'C:/src/Kros.Plugins' }))
+  await given($, on, DOC)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /CompanyId identifikuje/ })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('the tip is still drawn when the session cannot say which repository it is in', async ($, on) => {
+  on('session.root', () => { throw new Error('no root here') })
+  await given($, on, { ...DOC, kind: 'guideline', body: 'Pravidlo, ktoré sa má zobraziť.', repoRoot: 'C:/src/Invoicing' })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /Pravidlo, ktoré sa má zobraziť/ })).toBeDefined()
+
+  await ui.unmount()
 })

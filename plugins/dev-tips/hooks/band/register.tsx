@@ -24,6 +24,21 @@ const answeredId = atom({ plugin: 'dev-tips', key: 'answeredId' } as const, null
  * so the band asks about it in different words and records the answer without a suppression.
  */
 /**
+ * The repository this session is in, or null where it cannot be had.
+ *
+ * Caught, not left to throw: a failing call here would skip the whole render hook and the band
+ * would vanish without a word - the silent failure this plugin has already been bitten by twice.
+ * Not knowing means drawing the tip, which is the harmless direction.
+ */
+async function sessionRoot($: any) {
+  try {
+    return await $.session.root()
+  } catch {
+    return null
+  }
+}
+
+/**
  * Where the document actually is.
  *
  * An ADR lives in the mirror under the state directory. A guideline is relative to the repository
@@ -212,6 +227,13 @@ export const register: Register = on => {
     const beneath = await next(e)
     const pending = await readPending($, await read($, sessionId))
     if (pending === null) return beneath
+
+    // Picked for a different repository, so not this person's to see here. The fallback that found
+    // it is machine-wide - it has to be, since classic.SessionStart never reaches this module - and
+    // a rule that belongs to another project is noise at best and wrong at worst. A handshake
+    // written before the repository was recorded carries none, and is drawn as it always was.
+    const here = await sessionRoot($)
+    if (pending.repoRoot && here && pending.repoRoot !== here) return beneath
 
     // Keyed by tip, not a flag: an answer must not silence the tip that comes after it.
     if ((await read($, answeredId)) === pending.id) return beneath
