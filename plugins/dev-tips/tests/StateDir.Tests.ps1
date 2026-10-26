@@ -79,3 +79,27 @@ Describe 'Merge-LegacyState' {
         { Merge-LegacyState -TargetDir $target -LegacyDirs @((Join-Path $target 'no-such-dir')) } | Should -Not -Throw
     }
 }
+
+Describe 'Get-RepoRoot' {
+    It 'is the top of the working tree, not the directory the hook happened to start in' {
+        $repo = New-TempDir
+        & git -C $repo init --initial-branch=master --quiet
+        $deep = Join-Path $repo 'src/module'
+        New-Item -ItemType Directory -Path $deep -Force | Out-Null
+
+        Push-Location $deep
+        try { $root = Get-RepoRoot } finally { Pop-Location }
+
+        # Resolve-Path on both sides: git answers with forward slashes, Windows hands back its own.
+        (Resolve-Path $root).Path | Should -Be (Resolve-Path $repo).Path
+    }
+
+    It 'falls back to the current directory outside a repository' {
+        $plain = New-TempDir
+
+        Push-Location $plain
+        try { $root = Get-RepoRoot } finally { Pop-Location }
+
+        (Resolve-Path $root).Path | Should -Be (Resolve-Path $plain).Path
+    }
+}

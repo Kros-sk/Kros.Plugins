@@ -113,7 +113,7 @@ try
 
     # The band reads this whoever ends up drawing the tip, a dry run included: the point of
     # the dry run is to exercise what the surfaces will show.
-    Write-PendingTip -StateDir $stateDir -SessionId (Get-SessionId $payload) -Tip $tip -InstallState $installState
+    Write-PendingTip -StateDir $stateDir -SessionId (Get-SessionId $payload) -Tip $tip -InstallState $installState -RepoRoot (Get-RepoRoot)
 
     # `delivery` says who shows it. `band` leaves it to the mod, which is the only surface
     # that reaches the desktop at all; `hook` is the original path and the way back. The

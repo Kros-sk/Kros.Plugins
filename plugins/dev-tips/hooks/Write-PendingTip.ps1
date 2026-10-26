@@ -23,7 +23,7 @@ function Get-SharedDir
     return $dir
 }
 
-function Write-PendingTip([string]$SharedDir, [string]$StateDir, [string]$SessionId, $Tip, [string]$InstallState)
+function Write-PendingTip([string]$SharedDir, [string]$StateDir, [string]$SessionId, $Tip, [string]$InstallState, [string]$RepoRoot)
 {
     if ([string]::IsNullOrWhiteSpace($SharedDir)) { $SharedDir = Get-SharedDir }
     if ([string]::IsNullOrWhiteSpace($SessionId)) { $SessionId = 'unknown' }
@@ -40,6 +40,11 @@ function Write-PendingTip([string]$SharedDir, [string]$StateDir, [string]$Sessio
         source       = if ($Tip.source) { $Tip.source } else { 'packaged' }
         installState = $InstallState
         stateDir     = $StateDir
+        # The repository this was picked in. The band reaches most handshakes through its
+        # machine-wide fallback - the classic.SessionStart that would key them by session does not
+        # reach the module, another plugin's hook takes the event first - so without this it would
+        # tell somebody a guideline is "in this repository" about a file that is not there.
+        repoRoot     = $RepoRoot
         sessionId    = $SessionId
         pickedAt     = (Get-Date).ToUniversalTime().ToString('o')
     }

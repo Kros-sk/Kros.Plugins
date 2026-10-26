@@ -113,3 +113,24 @@ Describe 'Write-PendingTip housekeeping' {
         Test-Path -LiteralPath (Join-Path $shared 'pending-other.json') | Should -BeTrue
     }
 }
+
+Describe 'Write-PendingTip and the repository the tip was picked in' {
+    # The band reaches most handshakes through its fallback, which is machine-wide: without the
+    # repository written down it tells the person a guideline is "in this repository" when the
+    # handshake was picked in another one. The classic.SessionStart hook that would have keyed the
+    # handshake by session does not reach the module - another plugin's hook takes the event first.
+    It 'writes down which repository the tip came from' {
+        $shared = New-TempDir
+        $stateDir = New-TempDir
+        $repo = New-TempDir
+
+        Write-PendingTip -SharedDir $shared -StateDir $stateDir -SessionId 'abc-123' -InstallState 'n/a' `
+            -RepoRoot $repo `
+            -Tip ([pscustomobject]@{ id = 'guideline-workflow'; kind = 'guideline'; title = 'Workflow'
+                                     body = 'b'; ref = 'docs/guidelines/workflow.md'; source = 'docs' })
+
+        $written = Get-Content -LiteralPath (Join-Path $shared 'pending-abc-123.json') -Raw | ConvertFrom-Json
+
+        $written.repoRoot | Should -Be $repo
+    }
+}

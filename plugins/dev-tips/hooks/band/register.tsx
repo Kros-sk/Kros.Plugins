@@ -23,6 +23,21 @@ const answeredId = atom({ plugin: 'dev-tips', key: 'answeredId' } as const, null
  * A rule rather than a tool: an ADR or a guideline. It is not run and nobody "already uses" it,
  * so the band asks about it in different words and records the answer without a suppression.
  */
+/**
+ * Where the document actually is.
+ *
+ * An ADR lives in the mirror under the state directory. A guideline is relative to the repository
+ * it was picked in - which is not necessarily the one on screen: the band reaches most handshakes
+ * through its machine-wide fallback, because the classic.SessionStart that would key them by
+ * session never reaches this module. Saying "in this repository" was true only by luck.
+ */
+function documentPath(pending: Pending) {
+  if (pending.kind === 'adr') return `${pending.stateDir}/adr/${pending.ref}`
+  if (pending.repoRoot) return `${pending.repoRoot}/${pending.ref}`
+
+  return pending.ref ?? pending.title
+}
+
 function isDocument(pending: Pending) {
   return pending.kind === 'adr' || pending.kind === 'guideline'
 }
@@ -38,6 +53,8 @@ type Pending = {
   stateDir: string
   /** The whole document, for a notice whose body is only its opening. Absent for everything else. */
   full?: string | null
+  /** The repository the tip was picked in. A guideline's `ref` is relative to it. */
+  repoRoot?: string | null
   /** Written by the band the first time this handshake is drawn. */
   shownAt?: string
 }
@@ -151,9 +168,7 @@ async function recordAnswer($: any, pending: Pending, answer: Answer) {
     // model cannot find the document either unless it is told where it is: an ADR lives in the
     // mirror under the state directory, a guideline in the repository the person is working in.
     const text = isDocument(pending)
-      ? pending.kind === 'adr'
-        ? `Vysvetli mi, čo hovorí „${pending.title}" a čo to znamená pre moju prácu. Dokument je v ${pending.stateDir}/adr/${pending.ref}.`
-        : `Vysvetli mi, čo hovorí „${pending.title}" a čo to znamená pre moju prácu. Dokument je v ${pending.ref} v tomto repozitári.`
+      ? `Vysvetli mi, čo hovorí „${pending.title}" a čo to znamená pre moju prácu. Dokument je v ${documentPath(pending)}.`
       : `Ukáž mi, ako sa používa ${pending.ref ?? pending.title}, a na čo je to dobré.`
 
     // Caught, not voided: where nothing can take a prompt the press must still be recorded

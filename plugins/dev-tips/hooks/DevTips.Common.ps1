@@ -174,12 +174,22 @@ function Get-SessionId($Payload)
     return 'unknown'
 }
 
-function Get-RepoName
+# The top of the working tree the session is in, which is what a guideline's path is relative to.
+# Outside a repository, wherever the hook started: there is nothing better to say.
+function Get-RepoRoot
 {
     $root = $env:CLAUDE_PROJECT_DIR
     if ([string]::IsNullOrWhiteSpace($root)) { $root = (Get-Location).Path }
+
     $top = & git -C $root rev-parse --show-toplevel 2>$null
     if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($top)) { $root = $top.Trim() }
+
+    return $root
+}
+
+function Get-RepoName
+{
+    $root = Get-RepoRoot
     return (Split-Path -Leaf $root)
 }
 

@@ -418,3 +418,45 @@ test('a tip with no full text shows the same body expanded or not', async ($, on
 
   await ui.unmount()
 })
+
+test('a guideline is named by its own repository, not by whichever one is on screen', async ($, on) => {
+  const asked: string[] = []
+  on('prompt.submit', (_$: unknown, e: { text: string }) => {
+    asked.push(e.text)
+
+    return { text: e.text }
+  })
+  await given($, on, {
+    ...DOC,
+    kind: 'guideline',
+    title: 'Development Workflow',
+    ref: 'docs/guidelines/workflow.md',
+    repoRoot: 'C:/src/Invoicing',
+  }, { quiet: true })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+  await ui.press({ key: 'show' })
+  await ui.unmount()
+
+  const text = asked.join('\n')
+  expect(text).toMatch(/C:\/src\/Invoicing\/docs\/guidelines\/workflow\.md/)
+  expect(text).not.toMatch(/v tomto repozitári/)
+})
+
+test('a guideline whose handshake predates the repository being recorded still says where it is', async ($, on) => {
+  const asked: string[] = []
+  on('prompt.submit', (_$: unknown, e: { text: string }) => {
+    asked.push(e.text)
+
+    return { text: e.text }
+  })
+  await given($, on, { ...DOC, kind: 'guideline', title: 'Workflow', ref: 'docs/guidelines/workflow.md' }, { quiet: true })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+  await ui.press({ key: 'open' })
+  await ui.press({ key: 'show' })
+  await ui.unmount()
+
+  expect(asked.join('\n')).toMatch(/docs\/guidelines\/workflow\.md/)
+})
