@@ -450,6 +450,43 @@ to, že nikto nepíše text dvakrát.
 **Čo tým padá.** `tools/Test-TipFiles.ps1` a workflow `dev-tips-validate.yml` validovali kanál,
 ktorý je vypnutý; odchádzajú spolu s ním aj z PR na Kros.AiDevTools.
 
+### D19 — Handshake kľúčovaný session id je návrh, nie skutočnosť
+
+**Zvolené:** počíta sa s tým, že **všetko beží po záložnej vetve**. Handshake preto nesie aj repo, v
+ktorom vznikol, a pás odmietne ten, ktorý patrí inému repozitáru. Cesta podľa `session_id` zostáva
+ako správny tvar, nie ako to, na čom sa stavia.
+
+**Prečo to vzniklo.** `Write-PendingTip` píše jeden súbor na session a pás si ho má vyzdvihnúť podľa
+`session_id`, ktoré dostane z `classic.SessionStart`. To id ale **nikdy nedostane**: event zoberie
+`cc-plugin-sec-default`, ktorý beží skôr a posunie ho ďalej mimo nás. Potvrdila to systémová hláška
+26. 10.; sonda to nameriala už **14. 10.** a vtedy som napísal, že z jedného behu to nerozhodnem —
+v jej logu sú štyri načítania modulu za sebou a pri každom `cesta=ZALOHA (bez session_id)`.
+
+**Čo to znamená.** Záloha berie **najnovší nedoručený handshake na celom stroji**, bez ohľadu na to,
+ktorá session a ktoré repo ho vybrali. Dôsledky, od najmenšieho:
+
+| | dôsledok |
+|---|---|
+| doručovanie | funguje — za týždeň 4 tipy cez pás |
+| kľúčovanie podľa session | nikdy sa nepoužije |
+| guideline z iného repa | pred opravou sa nakreslil v okne, kam nepatrí |
+| veta „Dokument je v … v tomto repozitári" | bola pravdivá len náhodou |
+
+**Oprava.** Handshake nesie `repoRoot`; pás si cez `$.session.root()` zistí, kde kreslí, a handshake
+z iného repozitára preskočí. Neznámy koreň aj chýbajúci `repoRoot` znamenajú *kresli* — pri rozhodovaní
+medzi „radšej nič" a „radšej ukáž" vyhráva ukáž, lebo tichý prázdny pás je horší než tip navyše.
+Volanie je v `try/catch`: keby vyhodilo chybu, engine preskočí **celý** render hook a pás zmizne bez
+slova.
+
+**Vzorec, ktorý sa opakuje.** Je to tretíkrát, čo nás zabrzdil cudzí plugin, a zakaždým **ticho**:
+`pr-watch` zobral kreslenie (D16), teraz `cc-plugin-sec-default` zobral `SessionStart`. Žiadna chyba,
+žiadny riadok v logu, len funkcia, ktorá nefunguje. **Pri čomkoľvek, čo závisí od cudzieho hooku,
+treba merať, nie predpokladať** — a mať cestu, ktorá prežije, keď ten predpoklad padne.
+
+**Prijatý dôsledok.** Kým sa to nezmení, cooldown aj výber sú celostrojové, nie per session. Dve okná
+otvorené naraz si o jeden tip delia: ktoré sa prekreslí prvé, to ho nakreslí. Pre jeden tip za dva dni
+to nevadí; pri kratšom cooldowne by to začalo byť vidieť.
+
 ## Riziká
 
 | Riziko | Závažnosť | Odpoveď |
