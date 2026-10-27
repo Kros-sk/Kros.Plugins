@@ -1,0 +1,151 @@
+{
+  "version": 2,
+  "generated": "2026-09-17",
+  "note": "Hand-written for the MVP. From stage 1 onwards this file is produced by CI from the source repositories — do not edit it by hand.",
+  "tips": [
+    {
+      "id": "commit",
+      "kind": "command",
+      "title": "/commit spraví commit za teba",
+      "body": "Vygeneruje správu podľa konvencií repa a s číslom issue z názvu branchu — a nesiahne ti na staging, commitne presne to, čo máš nastagované.",
+      "ref": "/commit",
+      "repos": ["*"],
+      "published": "2026-04-27",
+      "maxShows": 2,
+      "suppressIfUsed": "commit",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "kros-ssw" },
+      "when": {
+        "did": {
+          "commands": [
+            "^\\s*git\\s+status",
+            "^\\s*git\\s+(diff|show)\\b",
+            "^\\s*git\\s+add\\b",
+            "^\\s*git\\s+commit\\b"
+          ],
+          "minMatches": 3
+        }
+      }
+    },
+    {
+      "id": "git-diff",
+      "kind": "command",
+      "title": "/git-diff porovná branch oproti masteru",
+      "body": "Nemusíš skladať refspec ručne — /git-diff zoberie commit, branch alebo nič a porovná to správne. Na masteri sa sám nespustí.",
+      "ref": "/git-diff",
+      "repos": ["*"],
+      "published": "2026-04-27",
+      "maxShows": 2,
+      "suppressIfUsed": "git-diff",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "kros-shared" },
+      "when": {
+        "did": {
+          "commands": [
+            "^\\s*git\\s+diff\\s+.*\\bmaster\\b",
+            "^\\s*git\\s+log\\s+.*\\bmaster\\b",
+            "^\\s*git\\s+diff\\s+origin/"
+          ],
+          "minMatches": 2
+        }
+      }
+    },
+    {
+      "id": "create-pr-description",
+      "kind": "command",
+      "title": "/create-pr-description napíše popis PR z commitov",
+      "body": "Prejde commity oproti masteru a zloží z nich popis v tvare, ktorý tu reviewers čakajú — vrátane limitu 4000 znakov, na ktorý API inak spadne.",
+      "ref": "/create-pr-description",
+      "repos": ["*"],
+      "published": "2026-04-27",
+      "maxShows": 2,
+      "suppressIfUsed": "create-pr-description",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "kros-shared" },
+      "when": {
+        "did": {
+          "commands": [
+            "^\\s*git\\s+log\\b",
+            "az\\s+repos\\s+pr\\b"
+          ],
+          "minMatches": 2
+        }
+      }
+    },
+    {
+      "id": "new-worktree",
+      "kind": "command",
+      "title": "/new-worktree pripraví worktree pre work item",
+      "body": "Založí worktree z čerstvého mastera pre každé repo podľa konfigurácie v CLAUDE.md — nemusíš to klikať repo po repe.",
+      "ref": "/new-worktree",
+      "repos": ["*"],
+      "published": "2026-04-27",
+      "maxShows": 2,
+      "suppressIfUsed": "new-worktree",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "kros-shared" },
+      "when": {
+        "did": {
+          "commands": [
+            "git\\s+worktree\\s+add",
+            "^\\s*git\\s+fetch\\b",
+            "^\\s*git\\s+(switch|checkout)\\b"
+          ],
+          "minMatches": 2
+        }
+      }
+    },
+    {
+      "id": "teapie",
+      "kind": "skill",
+      "title": "TeaPie ti vygeneruje kostru testu",
+      "body": "Nemusíš písať .http súbory ručne — /teapie naskafolduje request, init.csx aj test.csx a zaradí ich do existujúcej kolekcie.",
+      "ref": "/teapie",
+      "repos": ["invoicing"],
+      "published": "2026-04-27",
+      "maxShows": 3,
+      "suppressIfUsed": "teapie",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "teapie" },
+      "when": {
+        "did": {
+          "commands": [
+            "teapie\\s+(test|generate)",
+            "\\.http\\b"
+          ],
+          "minMatches": 2
+        }
+      }
+    },
+    {
+      "id": "qa-branch-tester",
+      "kind": "agent",
+      "title": "Testovacie scenáre z diffu branchu",
+      "body": "Agent qa-branch-tester porovná tvoj branch oproti masteru a vypíše, čo treba pretestovať — vrátane okrajových prípadov, na ktoré sa pri vlastnom kóde ľahko zabudne.",
+      "ref": "qa-branch-tester",
+      "repos": ["*"],
+      "published": "2026-04-27",
+      "maxShows": 2,
+      "suppressIfUsed": "qa-branch-tester",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "kros-shared" }
+    },
+    {
+      "id": "tfs-work-items",
+      "kind": "skill",
+      "title": "Work itemy z on-prem TFS priamo v Claude Code",
+      "body": "kros-tfs-tools vie čítať work itemy a púšťať WIQL dotazy proti tfs.kros.sk — nemusíš prepínať do prehliadača.",
+      "ref": "/query-work-items",
+      "repos": ["*"],
+      "published": "2026-04-27",
+      "maxShows": 2,
+      "suppressIfUsed": "query-work-items",
+      "install": { "marketplace": "kros-ai-dev-tools", "repo": "Kros-sk/Kros.AiDevTools", "plugin": "kros-tfs-tools" }
+    },
+    {
+      "id": "adr-0018-companyid",
+      "kind": "adr",
+      "title": "ADR 0018 — izolačný kľúč je CompanyId, nie TenantId",
+      "body": "V ESW službách sa filtruje výhradne podľa CompanyId. KORM to aplikuje globálnym filtrom, ale .IgnoreQueryFilters(), raw SQL a bulk operácie ho obchádzajú.",
+      "ref": null,
+      "repos": ["invoicing"],
+      "published": "2026-06-01",
+      "maxShows": 1,
+      "install": null
+    }
+  ]
+}

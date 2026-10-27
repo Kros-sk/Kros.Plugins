@@ -7,6 +7,7 @@ Internal Claude Code plugin marketplace for building and packaging plugins for t
 | Plugin | Stack | Description |
 |--------|-------|-------------|
 | **plugin-builder** | Any | Interactive workflow that builds a valid, upload-ready plugin package (`manifest.json` + `.zip`) for the KROS plugin store — validates every field against the Framework contract and can validate/deploy against a running app. |
+| **dev-tips** | Any | Shows one short, rate-limited tip at session start about internal tooling you may not know exists — skills, commands, agents, ADRs, team conventions — and asks whether you want it. |
 
 ## Installation
 
