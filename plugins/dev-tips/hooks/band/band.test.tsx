@@ -553,3 +553,30 @@ test('the band registers no classic.SessionStart hook for another plugin to swal
 
   expect(hooked).toHaveLength(1)
 })
+
+test('a tip already delivered to this session is not drawn again by a later load', async ($, on) => {
+  engineBeneath(on)
+  mock.env(on, { USERPROFILE: HOME })
+  on('session.id', () => ({ value: SESSION }))
+  on('fs.read', ($$: unknown, e: { path: string }) => {
+    if (isPending(e.path)) return { value: JSON.stringify({ ...TIP, shownAt: '2026-10-27T12:08:00Z' }) }
+
+    throw new Error(`no such file: ${e.path}`)
+  })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeUndefined()
+
+  await ui.unmount()
+})
+
+test('a tip handed to this session for the first time is drawn', async ($, on) => {
+  await given($, on)
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeDefined()
+
+  await ui.unmount()
+})

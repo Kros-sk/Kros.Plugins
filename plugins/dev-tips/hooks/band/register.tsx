@@ -139,8 +139,12 @@ async function readPending($: any, id: string | null) {
     try {
       const found = JSON.parse(await $.fs.read(path)) as Pending
 
-      // Marked here too, though this path never refuses a marked file: a tip drawn for the
-      // session it was picked for must not be left for another session's fallback to find.
+      // Delivered already, and not by this load: the same rule the fallback keeps. Before the
+      // session key was ever read this branch could not run, so the mark guarded everything by
+      // accident; once it did run, the same tip came back on every reload until it was answered
+      // again - six answers in one afternoon for two tips the hook had picked once.
+      if (found.shownAt && owned !== path) return null
+
       return await claim($, path, found)
     } catch {
       return null
