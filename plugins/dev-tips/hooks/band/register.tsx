@@ -15,7 +15,6 @@ import type { Register } from 'claude-code'
 
 import type { Answer } from '../../types'
 
-const sessionId = atom({ plugin: 'dev-tips', key: 'sessionId' } as const, null)
 const isOpen = atom({ plugin: 'dev-tips', key: 'isOpen' } as const, false)
 const answeredId = atom({ plugin: 'dev-tips', key: 'answeredId' } as const, null)
 
@@ -23,6 +22,22 @@ const answeredId = atom({ plugin: 'dev-tips', key: 'answeredId' } as const, null
  * A rule rather than a tool: an ADR or a guideline. It is not run and nobody "already uses" it,
  * so the band asks about it in different words and records the answer without a suppression.
  */
+/**
+ * Which session this is.
+ *
+ * Asked of the engine rather than taken from `classic.SessionStart`: that event never reaches this
+ * module - cc-plugin-sec-default hooks it first and sends it on past us - so the hook sat there
+ * doing nothing and the engine reported it skipped to everybody who installed the plugin. Asking
+ * is also the only way the handshake's session key has ever actually been read. See D19.
+ */
+async function sessionId($: any) {
+  try {
+    return await $.session.id()
+  } catch {
+    return null
+  }
+}
+
 /**
  * The repository this session is in, or null where it cannot be had.
  *
@@ -124,8 +139,12 @@ async function readPending($: any, id: string | null) {
     try {
       const found = JSON.parse(await $.fs.read(path)) as Pending
 
-      // Marked here too, though this path never refuses a marked file: a tip drawn for the
-      // session it was picked for must not be left for another session's fallback to find.
+      // Delivered already, and not by this load: the same rule the fallback keeps. Before the
+      // session key was ever read this branch could not run, so the mark guarded everything by
+      // accident; once it did run, the same tip came back on every reload until it was answered
+      // again - six answers in one afternoon for two tips the hook had picked once.
+      if (found.shownAt && owned !== path) return null
+
       return await claim($, path, found)
     } catch {
       return null
@@ -208,24 +227,9 @@ async function recordAnswer($: any, pending: Pending, answer: Answer) {
 }
 
 export const register: Register = on => {
-  on('classic.SessionStart', async ($, e, next) => {
-    // The same payload the PowerShell hook reads, so both name the handshake file alike.
-    if (e.session_id) {
-      await update($, sessionId, () => e.session_id)
-    }
-
-    return next(e)
-  }).catch(($, e, next) => {
-    // This hook gates the start of a session. A tip is never worth delaying one, so a
-    // failure here hands the event on untouched and the band simply has no id to use.
-    if (next.called) return undefined
-
-    return next(e)
-  })
-
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const beneath = await next(e)
-    const pending = await readPending($, await read($, sessionId))
+    const pending = await readPending($, await sessionId($))
     if (pending === null) return beneath
 
     // Picked for a different repository, so not this person's to see here. The fallback that found
