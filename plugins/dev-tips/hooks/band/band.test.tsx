@@ -580,3 +580,44 @@ test('a tip handed to this session for the first time is drawn', async ($, on) =
 
   await ui.unmount()
 })
+
+test('a session opened inside the repository still gets its tip', async ($, on) => {
+  writesOf(on)
+  engineBeneath(on)
+  mock.env(on, { USERPROFILE: HOME })
+  on('session.id', () => ({ value: SESSION }))
+  // The hook writes the git top level; the session was opened on a folder inside it.
+  on('session.root', () => ({ value: 'C:\\src\\Kros.Plugins\\plugins\\dev-tips' }))
+  on('fs.read', ($$: unknown, e: { path: string }) => {
+    if (isPending(e.path)) return { value: JSON.stringify({ ...TIP, repoRoot: 'C:/src/Kros.Plugins' }) }
+
+    throw new Error(`no such file: ${e.path}`)
+  })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('a tip refused for belonging elsewhere is not burned', async ($, on) => {
+  const writes = writesOf(on)
+  engineBeneath(on)
+  mock.env(on, { USERPROFILE: HOME })
+  on('session.id', () => ({ value: SESSION }))
+  on('session.root', () => ({ value: 'C:/src/Something-Else' }))
+  on('fs.read', ($$: unknown, e: { path: string }) => {
+    if (isPending(e.path)) return { value: JSON.stringify({ ...TIP, repoRoot: 'C:/src/Invoicing' }) }
+
+    throw new Error(`no such file: ${e.path}`)
+  })
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeUndefined()
+
+  await ui.unmount()
+
+  expect(writes[`${SHARED}/pending-${SESSION}.json`]).toBeUndefined()
+})
