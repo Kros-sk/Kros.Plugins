@@ -54,7 +54,9 @@ const given = async ($: any, on: any, tip: unknown = TIP, options: { quiet?: boo
     throw new Error(`no such file: ${e.path}`)
   })
 
-  await $.classic.SessionStart({ session_id: SESSION })
+  // The module asks the engine for the id; nothing hands it over. classic.SessionStart never
+  // reaches it - another plugin takes that event first - so no test may depend on it either.
+  on('session.id', () => ({ value: SESSION }))
 }
 
 test('nothing was handed over, nothing is drawn', async ($, on) => {
@@ -125,7 +127,7 @@ test('answering one tip does not silence the next one', async ($, on) => {
 
     throw new Error(`no such file: ${e.path}`)
   })
-  await $.classic.SessionStart({ session_id: SESSION })
+  on('session.id', () => ({ value: SESSION }))
 
   const first = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
   await first.press({ key: 'drop' })
@@ -518,4 +520,36 @@ test('the tip is still drawn when the session cannot say which repository it is 
   expect(await ui.find({ type: 'Text', text: /Pravidlo, ktoré sa má zobraziť/ })).toBeDefined()
 
   await ui.unmount()
+})
+
+test('the band asks the engine which session it is in, rather than waiting to be told', async ($, on) => {
+  engineBeneath(on)
+  mock.env(on, { USERPROFILE: HOME })
+  on('session.id', () => ({ value: SESSION }))
+  on('session.root', () => ({ value: 'C:/src/Invoicing' }))
+  on('fs.read', ($$: unknown, e: { path: string }) => {
+    if (isPending(e.path)) return { value: JSON.stringify({ ...TIP, repoRoot: 'C:/src/Invoicing' }) }
+
+    throw new Error(`no such file: ${e.path}`)
+  })
+  // Deliberately no classic.SessionStart: cc-plugin-sec-default takes that event before it
+  // reaches this module, so nothing here may depend on it arriving.
+
+  const ui = await $.ui.mount({ plugin: 'dev-tips', surface: 'desktop', ...BAND })
+
+  expect(await ui.find({ type: 'Text', text: /az-pr/ })).toBeDefined()
+
+  await ui.unmount()
+})
+
+test('the band registers no classic.SessionStart hook for another plugin to swallow', async ($, on) => {
+  const hooked: string[] = []
+  on('classic.SessionStart', () => { hooked.push('taken'); return {} })
+  mock.env(on, { USERPROFILE: HOME })
+  on('session.id', () => ({ value: SESSION }))
+  on('fs.read', () => { throw new Error('no file') })
+
+  await $.classic.SessionStart({ session_id: SESSION })
+
+  expect(hooked).toHaveLength(1)
 })
