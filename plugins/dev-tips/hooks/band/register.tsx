@@ -39,6 +39,24 @@ async function sessionId($: any) {
 }
 
 /**
+ * Whether a handshake picked in one place belongs to the session drawing it.
+ *
+ * Not an equality: the hook writes the git top level and the session names the folder it was
+ * opened on, which is often a folder inside it - a plugin's own directory in a monorepo, say. One
+ * containing the other is the same project. Unknown on either side means yes, since refusing on
+ * what we do not know would hide tips rather than misplace them.
+ */
+function sameProject(theirs?: string | null, ours?: string | null) {
+  if (!theirs || !ours) return true
+
+  const tidy = (p: string) => p.split('\\').join('/').replace(/\/+$/, '').toLowerCase()
+  const a = tidy(theirs)
+  const b = tidy(ours)
+
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
+}
+
+/**
  * The repository this session is in, or null where it cannot be had.
  *
  * Caught, not left to throw: a failing call here would skip the whole render hook and the band
@@ -145,7 +163,7 @@ async function readPending($: any, id: string | null) {
       // again - six answers in one afternoon for two tips the hook had picked once.
       if (found.shownAt && owned !== path) return null
 
-      return await claim($, path, found)
+      return { found, path }
     } catch {
       return null
     }
@@ -167,7 +185,7 @@ async function readPending($: any, id: string | null) {
     // Somebody has already been shown this one. Only the load that drew it keeps drawing it.
     if (found.shownAt && owned !== path) return null
 
-    return await claim($, path, found)
+    return { found, path }
   } catch {
     return null
   }
@@ -229,15 +247,23 @@ async function recordAnswer($: any, pending: Pending, answer: Answer) {
 export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const beneath = await next(e)
-    const pending = await readPending($, await sessionId($))
-    if (pending === null) return beneath
+    // The handshake and where it lives: the path is needed to mark it, once it is clear it will
+    // actually be drawn.
+    const held = await readPending($, await sessionId($))
+    if (held === null) return beneath
+
+    const pending = held.found
 
     // Picked for a different repository, so not this person's to see here. The fallback that found
     // it is machine-wide - it has to be, since classic.SessionStart never reaches this module - and
     // a rule that belongs to another project is noise at best and wrong at worst. A handshake
     // written before the repository was recorded carries none, and is drawn as it always was.
     const here = await sessionRoot($)
-    if (pending.repoRoot && here && pending.repoRoot !== here) return beneath
+    if (!sameProject(pending.repoRoot, here)) return beneath
+
+    // Claimed only now, with every refusal behind us. Marking it in readPending burned a tip that
+    // was then refused: delivered according to the file, never seen by anybody.
+    await claim($, held.path, pending)
 
     // Keyed by tip, not a flag: an answer must not silence the tip that comes after it.
     if ((await read($, answeredId)) === pending.id) return beneath
